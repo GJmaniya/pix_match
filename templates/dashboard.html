@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Events - PixMatch</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="dashboard-container">
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <div class="logo">
+                    <img src="{{ url_for('static', filename='images/pixmatch-logo.png') }}" alt="PixMatch Logo">
+                </div>
+                <nav class="sidebar-nav">
+                    <ul>
+                        <li><a href="#"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 12H21M3 6H21M3 18H15" stroke="#667085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Collapse</a></li>
+                        <li class="active"><a href="{{ url_for('dashboard') }}"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 4H5C3.89543 4 3 4.89543 3 6V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V6C21 4.89543 20.1046 4 19 4Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 2V6M8 2V6M3 10H21" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> My Events</a></li>
+                        <li><a href="{{ url_for('dashboard') }}"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z" stroke="#667085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 22V12H15V22" stroke="#667085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Event Home</a></li>
+                        <li><a href="#"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.84 4.60987C20.3292 4.099 19.7228 3.69364 19.0554 3.41708C18.3879 3.14052 17.6725 2.99805 16.95 2.99805C16.2275 2.99805 15.5121 3.14052 14.8446 3.41708C14.1772 3.69364 13.5708 4.099 13.06 4.60987L12 5.66987L10.94 4.60987C9.9083 3.57816 8.50903 2.99858 7.05 2.99858C5.59096 2.99858 4.19169 3.57816 3.16 4.60987C2.1283 5.64156 1.54872 7.04084 1.54872 8.49987C1.54872 9.95891 2.1283 11.3582 3.16 12.3899L4.22 13.4499L12 21.2299L19.78 13.4499L20.84 12.3899C21.3508 11.8791 21.7562 11.2727 22.0327 10.6052C22.3093 9.93777 22.4518 9.22236 22.4518 8.49987C22.4518 7.77738 22.3093 7.06198 22.0327 6.39452C21.7562 5.72706 21.3508 5.12065 20.84 4.60987Z" stroke="#667085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> My favourites</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="main-header">
+                <h2>Welcome, {{ user_first_name }}</h2>
+                <div class="user-profile">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z" stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+            </header>
+
+            <section class="content-header">
+                <div class="tabs">
+                    <span class="tab-item active">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11.3333 4H1.33333C0.966667 4 0.666667 4.29867 0.666667 4.66533V14.6653C0.666667 15.032 0.966667 15.332 1.33333 15.332H14C14.3667 15.332 14.6667 15.032 14.6667 14.6653V7.332C14.6667 6.96533 14.3667 6.66533 14 6.66533H4.66667L3.33333 4H2.66667M14.6667 2.66533V4.66533H12.6667L11.3333 2.66533H4.66667C4.2934 2.66533 3.93577 2.80587 3.68571 3.05593C3.43566 3.30598 3.29512 3.66362 3.29512 4.03033" stroke="#344054" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Albums
+                        <span class="badge">{{ events|length }}</span>
+                    </span>
+                </div>
+                <a href="{{ url_for('create_event') }}" class="btn btn-primary">Create Event</a>
+            </section>
+
+            {% if events %}
+            <div class="event-grid">
+                {% for event in events %}
+                <div class="event-card">
+                    <form action="{{ url_for('delete_event', event_id=event[0]) }}" method="post" class="delete-form" onsubmit="return confirm('Are you sure you want to delete this event and all its photos?');">
+                        <button type="submit" class="delete-btn" title="Delete Event">&times;</button>
+                    </form>
+                    <a href="{{ url_for('add_album', event_id=event[0]) }}" class="event-card-main-link">
+                        <div class="card-image-placeholder">
+                            <span class="event-initial">{{ event[1][0] | upper }}</span>
+                        </div>
+                        <div class="card-content">
+                            <h3>{{ event[1] }}</h3>
+                            <p>{{ event[2] }}</p>
+                        </div>
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <section class="empty-state">
+                <div class="empty-state-content">
+                    <img src="{{ url_for('static', filename='images/dashboard.png') }}" alt="Folder Icon" class="empty-state-icon" style="width: 180px;">
+                    <h2>You've successfully signed up!</h2>
+                    <p>Welcome! Create an Event to start sharing photos with event participants.</p>
+                    <a href="{{ url_for('create_event') }}" class="btn btn-primary">Create Event</a>
+                </div>
+            </section>
+            {% endif %}
+
+        </main>
+    </div>
+</body>
+</html>

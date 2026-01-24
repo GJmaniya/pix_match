@@ -1,0 +1,137 @@
+.album-details {
+    padding: 16px 0;
+    border-bottom: 1px solid #EAECF0;
+}
+
+.album-details .tabs .tab-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 4px;
+    font-weight: 500;
+    color: #667085;
+    margin-right: 24px;
+    border-bottom: 2px solid transparent;
+}
+
+.album-details .tabs .tab-item.active {
+    color: #344054;
+    border-bottom: 2px solid #344054;
+}
+
+.album-details .badge {
+    background-color: #F2F4F7;
+    color: #344054;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.album-content {
+    padding: 24px 0;
+}
+
+.processing-status {
+    font-size: 14px;
+    color: #667085;
+    margin-bottom: 16px;
+}
+
+.album-details {
+    padding: 16px 0;
+    border-bottom: 1px solid #EAECF0;
+}
+
+.album-details .tabs .tab-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 4px;
+    font-weight: 500;
+    color: #667085;
+    margin-right: 24px;
+    border-bottom: 2px solid transparent;
+}
+
+.album-details .tabs .tab-item.active {
+    color: #344054;
+    border-bottom: 2px solid #344054;
+}
+
+.album-details .badge {
+    background-color: #F2F4F7;
+    color: #344054;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.album-content {
+    padding: 24px 0;
+}
+
+.processing-status {
+    font-size: 14px;
+    color: #667085;
+    margin-bottom: 16px;
+}
+
+/* --- UPDATED & NEW STYLES BELOW --- */
+
+.album-card {
+    background-color: #F2F4F7;
+    border-radius: 12px;
+    width: 280px;
+    height: 220px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 20px;
+    position: relative; /* This is required to position the footer */
+}
+
+/* Add this to the bottom of add_album.css */
+.album-link {
+    text-decoration: none;
+}
+.album-card h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #101828;
+    margin: 0;
+}
+
+.card-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 15px;
+    display: flex;
+    justify-content: flex-end; /* Aligns icons to the right */
+    align-items: center;
+    gap: 8px; /* Adds space between icons */
+}
+
+.icon-btn {
+    background-color: transparent;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    line-height: 0; /* Helps align SVGs properly */
+}
+
+.icon-btn svg {
+    width: 20px;
+    height: 20px;
+    stroke: #667085;
+    fill: none; /* Important for outline icons like the heart */
+}
+
+.icon-btn:hover svg {
+    stroke: #101828; /* Darker icon color on hover */
+}

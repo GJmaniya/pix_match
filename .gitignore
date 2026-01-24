@@ -1,0 +1,26 @@
+# Ignore everything by default
+*
+
+# Unignore directories so we can find files inside them
+!*/
+
+# Unignore specific file types we want to track
+!*.html
+!*.css
+!*.js
+!*.py
+!.gitignore
+
+# Re-ignore things that shouldn't be tracked even if they match above (or are dirs)
+venv/
+__pycache__/
+.git/
+.vscode/
+client_secrets.json
+database.db
+*.db
+*.log
+Bhuman/
+known_faces/
+gaurav/
+static/uploads/

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixMatch - Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+</head>
+<body>
+    <div class="background-gradient"></div>
+    <div class="login-container">
+        <div class="left-panel">
+            <div class="logo">
+                <img src="{{ url_for('static', filename='images/pixmatch-logo.png') }}" alt="PixMatch Logo" style="width:200px;max-width:100%;height:100px;display:block;margin:100px; margin-top: auto;">
+            </div>
+            <div class="illustration">
+                <img src="{{ url_for('static', filename='images/singin.png') }}" alt="Smart Photo Sharing Illustration"> </div>
+            <h1>Smart Photo Sharing for Your Events</h1>
+            <p>Guests can find all their photos instantly with a quick selfie. Create your event for free and let everyone enjoy their memories without the endless search</p>
+        </div>
+        <div class="right-panel">
+            <h2 class="form-title">Log in</h2>
+
+            {% if error %}
+                <p style="color: red; text-align: center;">{{ error }}</p>
+            {% endif %}
+
+            <a href="{{ url_for('login_google') }}" class="google-signin" style="text-decoration:none;display:inline-block">
+                <img src="{{ url_for('static', filename='images/google.png') }}" alt="Google Logo">
+                Log in with Google
+            </a>
+
+            <div class="separator">
+                <span class="or-text">OR</span>
+            </div>
+            <h3 class="form-subtitle">Log in with Email</h3>
+            
+            <form method="POST" action="{{ url_for('login') }}">
+                <div class="input-group">
+                    <label for="username_or_email">Email or User Name</label>
+                    <input type="text" id="username_or_email" name="username_or_email" placeholder="Enter your email or user name" required>
+                </div>
+
+                <div class="input-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="Enter your Password" required>
+                </div>
+
+                <button type="submit" class="login-button">Log in</button>
+            </form>
+        </div>
+
+    <script src="{{ url_for('static', filename='login.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create New Event - PixMatch</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='create_event.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <div class="logo">
+                    <a href="{{ url_for('dashboard') }}" style="text-decoration: none; cursor: pointer;">
+                        <img src="{{ url_for('static', filename='images/pixmatch-logo.png') }}" alt="PixMatch Logo">
+                    </a>
+                </div>
+                <nav class="sidebar-nav">
+                    <ul>
+                        <li><a href="#"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                    xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M3 12H21M3 6H21M3 18H15" stroke="#667085" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                </svg> Collapse</a></li>
+                        <li class="active"><a href="{{ url_for('dashboard') }}"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path
+                                        d="M19 4H5C3.89543 4 3 4.89543 3 6V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V6C21 4.89543 20.1046 4 19 4Z"
+                                        stroke="white" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                    <path d="M16 2V6M8 2V6M3 10H21" stroke="white" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                </svg> My Events</a></li>
+                        <li><a href="{{ url_for('dashboard') }}"><svg width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path
+                                        d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z"
+                                        stroke="#667085" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                    <path d="M9 22V12H15V22" stroke="#667085" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                </svg> Event Home</a></li>
+                        <li><a href="#"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                    xmlns="http://www.w3.org/2000/svg">
+                                    <path
+                                        d="M20.84 4.60987C20.3292 4.099 19.7228 3.69364 19.0554 3.41708C18.3879 3.14052 17.6725 2.99805 16.95 2.99805C16.2275 2.99805 15.5121 3.14052 14.8446 3.41708C14.1772 3.69364 13.5708 4.099 13.06 4.60987L12 5.66987L10.94 4.60987C9.9083 3.57816 8.50903 2.99858 7.05 2.99858C5.59096 2.99858 4.19169 3.57816 3.16 4.60987C2.1283 5.64156 1.54872 7.04084 1.54872 8.49987C1.54872 9.95891 2.1283 11.3582 3.16 12.3899L4.22 13.4499L12 21.2299L19.78 13.4499L20.84 12.3899C21.3508 11.8791 21.7562 11.2727 22.0327 10.6052C22.3093 9.93777 22.4518 9.22236 22.4518 8.49987C22.4518 7.77738 22.3093 7.06198 22.0327 6.39452C21.7562 5.72706 21.3508 5.12065 20.84 4.60987Z"
+                                        stroke="#667085" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                </svg> My favourites</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="page-header">
+                <div class="user-profile-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                            d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21"
+                            stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        <path
+                            d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z"
+                            stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                </div>
+            </header>
+
+            <div class="form-container">
+                <div class="form-header">
+                    <a href="{{ url_for('dashboard') }}" class="back-link">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12.5 15L7.5 10L12.5 5" stroke="#344054" stroke-width="1.66667"
+                                stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </a>
+                    <h2>Create new event</h2>
+                    <button class="options-btn">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path
+                                d="M10.0003 10.8333C10.4606 10.8333 10.8337 10.4602 10.8337 9.99996C10.8337 9.53972 10.4606 9.16663 10.0003 9.16663C9.54009 9.16663 9.16699 9.53972 9.16699 9.99996C9.16699 10.4602 9.54009 10.8333 10.0003 10.8333Z"
+                                stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            <path
+                                d="M10.0003 4.16663C10.4606 4.16663 10.8337 3.79354 10.8337 3.33329C10.8337 2.87305 10.4606 2.5 10.0003 2.5C9.54009 2.5 9.16699 2.87305 9.16699 3.33329C9.16699 3.79354 9.54009 4.16663 10.0003 4.16663Z"
+                                stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            <path
+                                d="M10.0003 17.5C10.4606 17.5 10.8337 17.1269 10.8337 16.6666C10.8337 16.2064 10.4606 15.8333 10.0003 15.8333C9.54009 15.8333 9.16699 16.2064 9.16699 16.6666C9.16699 17.1269 9.54009 17.5 10.0003 17.5Z"
+                                stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </button>
+                </div>
+
+                <form action="#" method="POST" class="event-form" enctype="multipart/form-data">
+                    <h3>Let's start with event details</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="event-name">What's your event name?</label>
+                            <input type="text" id="event-name" name="event_name" placeholder="Enter event name"
+                                required>
+                        </div>
+                        <div class="form-group">
+                            <label for="event-date">When's your event?</label>
+                            <input type="text" id="event-date" name="event_date" placeholder="mm/dd/yyyy" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="event-venue">Where's the venue?</label>
+                            <input type="text" id="event-venue" name="event_venue" placeholder="Enter location"
+                                required>
+                        </div>
+                        <div class="form-group">
+                            <label for="event-category">Event category</label>
+                            <input type="text" id="event-category" name="event_category" placeholder="Event type"
+                                required>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 20px;">
+                        <label for="cover-photo">Cover Photo (Optional)</label>
+                        <input type="file" id="cover-photo" name="cover_photo" accept="image/*">
+                        <small style="color: #667085; display: block; margin-top: 8px;">Upload a cover image for your
+                            event album</small>
+                    </div>
+
+                    <div class="form-actions">
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Next</button>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+</body>
+
+</html>

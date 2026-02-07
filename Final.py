@@ -22,18 +22,20 @@ while device_choice not in ['gpu', 'cpu']:
     device_choice = input("Invalid choice. Please enter 'gpu' or 'cpu': ").strip().lower()
 device = 'cuda' if device_choice == 'gpu' and torch.cuda.is_available() else 'cpu'
 
-# Optimized MTCNN with stricter thresholds and larger min_face_size
-mtcnn = MTCNN(keep_all=True, device=device, min_face_size=60, thresholds=[0.6, 0.7, 0.8], post_process=True)
+# Optimized MTCNN with balanced thresholds for better accuracy without false negatives
+mtcnn = MTCNN(keep_all=True, device=device, min_face_size=35, thresholds=[0.65, 0.75, 0.85], post_process=True)
 inception_model = InceptionResnetV1(pretrained='vggface2').eval().to(device)
 
 def preprocess_image(image, max_size=640):
+    # Keep original image for saving
+    original_image = image.copy()
     # Resize image to reduce computation while maintaining aspect ratio
     h, w = image.shape[:2]
     scale = max_size / max(h, w)
     if scale < 1:
         image = cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
     rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    return rgb, image
+    return rgb, original_image
 
 def load_known_faces():
     all_embeddings = []
@@ -93,7 +95,7 @@ def extract_embeddings(image_path):
         embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
     return embeddings.cpu().numpy(), original_image
 
-def process_image(img_name, faiss_index, known_names, tolerance=0.3):
+def process_image(img_name, faiss_index, known_names, tolerance=0.62):
     img_path = os.path.join(image_folder, img_name)
     start = time.time()
 
@@ -103,16 +105,17 @@ def process_image(img_name, faiss_index, known_names, tolerance=0.3):
         return
 
     recognized_set = set()
-    # Search for all embeddings in a single FAISS call
-    dists, idxs = faiss_index.search(embeddings.astype(np.float32), 1)
+    # Search for top 3 nearest neighbors for better accuracy
+    dists, idxs = faiss_index.search(embeddings.astype(np.float32), 3)
     for dist, idx in zip(dists, idxs):
-        if dist[0] < tolerance:
+        # Match if distance is below tolerance AND better than second match
+        if len(dist) >= 2 and dist[0] < tolerance and dist[0] < dist[1] * 0.95:
             person = known_names[idx[0]]
             recognized_set.add(person)
             person_dir = os.path.join(processed_images_dir, person)
             os.makedirs(person_dir, exist_ok=True)
             out_path = os.path.join(person_dir, f"processed_{img_name}")
-            cv2.imwrite(out_path, image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+            cv2.imwrite(out_path, image, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
 
     logging.info(f"\033[1m{img_name}\033[0m ➤ {' • '.join(recognized_set) if recognized_set else 'No Match'}")
     logging.info(f"Processed in {time.time() - start:.2f} sec\n{'='*40}")

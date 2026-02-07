@@ -1,0 +1,280 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
+    --background-start: #2a5857; /* Darker teal/green from your image gradient */
+    --background-end: #7d8f8d;   /* Lighter grey-green from your image gradient */
+    --white: #ffffff;
+    --light-gray: #f8f8f8;
+    --dark-gray: #333333;
+    --text-color: #555555;
+    --border-color: #e0e0e0;
+    --google-blue: #4285F4;
+    --google-text: #707070;
+    --button-bg: #4CAF50; /* Example green, adjust as needed for the login button */
+    --button-text: #ffffff;
+}
+
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', sans-serif;
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    background: linear-gradient(to bottom right, #C2C2C1, #03494B, #B2B2B2);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 2rem;
+}
+
+.login-container {
+    display: flex;
+    background-color: var(--white);
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    width: 90%; /* Adjust as needed */
+    max-width: 1000px; /* Max width for larger screens */
+    min-height: 600px;
+    overflow: hidden; /* Ensures rounded corners cut off content */
+    opacity: 0; /* Will be animated in by GSAP */
+    transform: translateY(20px); /* Initial position for animation */
+}
+
+.left-panel {
+    flex: 1;
+    background-color: var(--light-gray); /* Match the lighter gray on the left */
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    color: var(--dark-gray);
+    position: relative;
+}
+
+.left-panel .logo {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    position: absolute; /* Position relative to .left-panel */
+    top: 40px;
+    left: 40px;
+}
+
+.left-panel .logo img {
+    width: 30px;
+    height: 30px;
+    margin-right: 10px;
+    object-fit: contain;
+}
+
+.left-panel .logo span {
+    font-weight: 600;
+    font-size: 1.2em;
+    color: var(--dark-gray);
+}
+
+.left-panel .illustration {
+    margin: 40px 0;
+    width: 100%;
+    text-align: center; /* Center the illustration */
+}
+
+.left-panel .illustration img {
+    max-width: 80%;
+    height: auto;
+    object-fit: contain;
+}
+
+.left-panel h1 {
+    font-size: 1.8em;
+    font-weight: 700;
+    margin-bottom: 15px;
+    line-height: 1.3;
+    color: var(--dark-gray);
+}
+
+.left-panel p {
+    font-size: 0.9em;
+    line-height: 1.6;
+    color: var(--text-color);
+}
+
+.right-panel {
+    flex: 1;
+    background-color: var(--white);
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+.form-title {
+    font-size: 2em;
+    font-weight: 600;
+    margin-bottom: 30px;
+    color: var(--dark-gray);
+}
+
+.google-signin {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 300px;
+    padding: 12px 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--white);
+    color: var(--google-text);
+    font-size: 1em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.google-signin:hover {
+    background-color: var(--light-gray);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.google-signin img {
+    width: 20px;
+    height: 20px;
+    margin-right: 10px;
+}
+
+.separator {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    max-width: 300px;
+    margin: 30px 0;
+    color: var(--text-color);
+}
+
+.separator::before,
+.separator::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background-color: var(--border-color);
+}
+
+.or-text {
+    padding: 0 15px;
+    font-size: 0.9em;
+    color: var(--text-color);
+}
+
+.form-subtitle {
+    font-size: 1.2em;
+    font-weight: 600;
+    margin-bottom: 25px;
+    color: var(--dark-gray);
+}
+
+.input-group {
+    width: 100%;
+    max-width: 300px;
+    margin-bottom: 20px;
+}
+
+.input-group label {
+    display: block;
+    font-size: 0.85em;
+    color: var(--text-color);
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.input-group input {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.9em;
+    color: var(--dark-gray);
+    outline: none;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.input-group input::placeholder {
+    color: #b0b0b0;
+}
+
+.input-group input:focus {
+    border-color: #6a8cff; /* A subtle blue highlight on focus */
+    box-shadow: 0 0 0 3px rgba(106, 140, 255, 0.2);
+}
+
+.login-button {
+    width: 100%;
+    max-width: 300px;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    background-color: var(--dark-gray); /* Changed to dark gray as in the image */
+    color: var(--white);
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    margin-top: 10px;
+}
+
+.login-button:hover {
+    background-color: #555555; /* Slightly lighter dark gray on hover */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .login-container {
+        flex-direction: column;
+        width: 95%;
+        max-width: 450px; /* Stack panels on smaller screens */
+        min-height: auto;
+    }
+
+    .left-panel {
+        padding: 30px;
+        text-align: center;
+        align-items: center;
+    }
+    .left-panel .logo {
+        position: static; /* Reset positioning */
+        margin-bottom: 20px;
+    }
+
+    .left-panel h1 {
+        font-size: 1.5em;
+    }
+
+    .left-panel p {
+        font-size: 0.85em;
+    }
+
+    .right-panel {
+        padding: 30px;
+    }
+
+    .form-title {
+        font-size: 1.8em;
+        margin-bottom: 20px;
+    }
+
+    .google-signin,
+    .separator,
+    .input-group,
+    .login-button {
+        max-width: 100%; /* Allow full width on small screens */
+    }
+}

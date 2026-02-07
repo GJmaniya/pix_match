@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixMatch - Share Event Photos using Face Recognition</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='home.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <header class="main-header">
+        <nav class="navbar">
+            <div class="logo">
+                <a href="{{ url_for('home') }}" style="text-decoration: none; cursor: pointer;"><img
+                        src="{{ url_for('static', filename='images/pixmatch-logo.png') }}" alt="PixMatch Logo"
+                        class="logo-image"></a>
+            </div>
+            <ul class="nav-links">
+            </ul>
+            <div class="nav-actions">
+                <a href="{{ url_for('login') }}" class="btn btn-primary">Login</a>
+                <a href="{{ url_for('signup') }}" class="btn btn-primary">Sign up</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="hero-section">
+        <div class="hero-content">
+            <h1>Share Event Photos using <span class="highlight">Face Recognition</span></h1>
+            <p>Guests click a selfie and find their photos instantly</p>
+
+            <div class="features">
+                <div class="feature-card">
+                    <img src="{{ url_for('static', filename='images/face.png') }}" alt="Face Recognition"
+                        class="feature-icon"
+                        style="width:28px;height:28px;object-fit:contain;margin-right:10px;float:left;">
+                    <span>Face Recognition</span>
+                </div>
+                <div class="feature-card">
+                    <img src="{{ url_for('static', filename='images/lock.png') }}" alt="Privacy First"
+                        class="feature-icon"
+                        style="width:28px;height:28px;object-fit:contain;margin-right:10px;float:left;">
+                    <span>Privacy First</span>
+                </div>
+                <div class="feature-card">
+                    <img src="{{ url_for('static', filename='images/mony.png') }}" alt="Monetize Gallery"
+                        class="feature-icon"
+                        style="width:28px;height:28px;object-fit:contain;margin-right:10px;float:left;">
+                    <span>Monetize Gallery</span>
+                </div>
+            </div>
+
+            <div class="benefits">
+                <span>
+                    <svg width="16" height="16" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                            d="M7.49991 0.877014C3.84222 0.877014 0.877014 3.84222 0.877014 7.49991C0.877014 11.1576 3.84222 14.1228 7.49991 14.1228C11.1576 14.1228 14.1228 11.1576 14.1228 7.49991C14.1228 3.84222 11.1576 0.877014 7.49991 0.877014ZM6.51952 10.4803L3.51952 7.48033L4.48033 6.51952L6.51952 8.55871L10.5195 4.55871L11.4803 5.51952L6.51952 10.4803Z"
+                            fill="currentColor"></path>
+                    </svg>
+                    99.3% Accuracy
+                </span>
+                <span>
+                    <svg width="16" height="16" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                            d="M7.49991 0.877014C3.84222 0.877014 0.877014 3.84222 0.877014 7.49991C0.877014 11.1576 3.84222 14.1228 7.49991 14.1228C11.1576 14.1228 14.1228 11.1576 14.1228 7.49991C14.1228 3.84222 11.1576 0.877014 7.49991 0.877014ZM6.51952 10.4803L3.51952 7.48033L4.48033 6.51952L6.51952 8.55871L10.5195 4.55871L11.4803 5.51952L6.51952 10.4803Z"
+                            fill="currentColor"></path>
+                    </svg>
+                    Try for Free
+                </span>
+            </div>
+
+            <a href="{{ url_for('signup') }}" class="btn btn-primary btn-large">Sign up</a>
+        </div>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <script src="{{ url_for('static', filename='home.js') }}"></script>
+</body>
+
+</html>

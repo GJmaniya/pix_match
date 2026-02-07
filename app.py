@@ -174,17 +174,15 @@ def home():
 def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
-
+    user_id = session['user_id']
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
-
-    cursor.execute("SELECT id, event_name, event_date FROM events WHERE user_id = ?", (session['user_id'],))
+    cursor.execute('SELECT first_name FROM users WHERE id = ?', (user_id,))
+    user_first_name = cursor.fetchone()[0]
+    cursor.execute('SELECT id, event_name, event_date, cover_photo FROM events WHERE user_id = ?', (user_id,))
     events = cursor.fetchall()
     conn.close()
-
-    return render_template('dashboard.html', 
-                           user_first_name=session['first_name'], 
-                           events=events)
+    return render_template('dashboard.html', user_first_name=user_first_name, events=events)
 
 # --- Authentication Routes ---
 @app.route('/login', methods=['GET', 'POST'])
@@ -235,11 +233,24 @@ def create_event():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     if request.method == 'POST':
+        # Handle cover photo upload
+        cover_photo_filename = None
+        if 'cover_photo' in request.files:
+            file = request.files['cover_photo']
+            if file and file.filename != '' and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                # Add timestamp to make filename unique
+                import uuid
+                unique_filename = f"{uuid.uuid4().hex}_{filename}"
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_filename))
+                cover_photo_filename = unique_filename
+        
         session['event_details'] = {
             'event_name': request.form['event_name'],
             'event_date': request.form['event_date'],
             'event_venue': request.form['event_venue'],
-            'event_category': request.form['event_category']
+            'event_category': request.form['event_category'],
+            'cover_photo': cover_photo_filename
         }
         return redirect(url_for('set_privacy'))
     return render_template('create_event.html')
@@ -254,10 +265,10 @@ def set_privacy():
         conn = sqlite3.connect('database.db')
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO events (user_id, event_name, event_date, venue, category, privacy)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO events (user_id, event_name, event_date, venue, category, privacy, cover_photo)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (session['user_id'], details['event_name'], details['event_date'],
-              details['event_venue'], details['event_category'], privacy_setting))
+              details['event_venue'], details['event_category'], privacy_setting, details.get('cover_photo')))
         new_event_id = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -497,16 +508,23 @@ def match_photos_api():
         
         # Run matching
         try:
-            # We can run this in a thread if we want to return immediately, 
-            # but for a simple API usually we wait for result or return a job ID.
-            # Given the requirement "process Final.py ... add in matchphotos folder",
-            # We'll wait and return the summary.
-            
+            # Clear matchphotos directory before starting a new search
+            if os.path.exists(match_output_dir):
+                for f in os.listdir(match_output_dir):
+                    file_path = os.path.join(match_output_dir, f)
+                    try:
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                    except Exception as e:
+                        app.logger.error(f"Error clearing matchphotos file {f}: {e}")
+            else:
+                os.makedirs(match_output_dir, exist_ok=True)
+
             result = matcher.find_matches(
                 user_photo_path, 
                 search_dir, 
                 match_output_dir,
-                tolerance=0.5
+                tolerance=0.50
             )
             
             # Remove temp file

@@ -1,0 +1,297 @@
+.content-wrapper {
+    background-color: #FFFFFF;
+    border: 1px solid #EAECF0;
+    border-radius: 12px;
+    padding: 24px;
+}
+
+.album-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.album-header h2 {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0;
+    flex-grow: 1;
+}
+
+.album-header .back-link,
+.album-header .options-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+}
+
+.album-tabs {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #EAECF0;
+}
+
+.album-tabs .tab-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 4px;
+    font-weight: 500;
+    color: #667085;
+    margin-right: 24px;
+    border-bottom: 2px solid transparent;
+}
+
+.album-tabs .tab-item.active {
+    color: #344054;
+    border-bottom: 2px solid #344054;
+}
+
+.album-tabs .badge {
+    background-color: #F2F4F7;
+    color: #344054;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.album-tabs .attach-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 80px 40px;
+}
+
+.empty-state img {
+    width: 150px;
+    margin-bottom: 24px;
+}
+
+.empty-state h2 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #101828;
+    margin: 0 0 16px 0;
+}
+
+.empty-state p {
+    color: #667085;
+    font-size: 16px;
+    margin: 0 0 32px 0;
+}
+
+.photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    padding: 24px 0;
+}
+
+.photo-card {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.photo-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.photo-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.photo-card:hover .photo-overlay {
+    opacity: 1;
+}
+
+.delete-photo-form {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 20;
+}
+
+.icon-btn {
+    background: rgba(0, 0, 0, 0.4);
+    border: none;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    padding: 6px;
+    line-height: 0;
+    transition: background-color 0.2s, opacity 0.2s, transform 0.2s;
+    opacity: 0;
+    visibility: hidden;
+    transform: scale(0.8);
+}
+
+.photo-card:hover .icon-btn {
+    opacity: 1;
+    visibility: visible;
+    transform: scale(1);
+}
+
+.icon-btn:hover {
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.icon-btn svg {
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+}
+
+.delete-btn {
+    background-color: rgba(220, 38, 38, 0.7); /* Red background */
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.delete-btn:hover {
+    background-color: rgba(220, 38, 38, 0.9); /* Darker red on hover */
+}
+
+.photo-actions {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    display: flex;
+    gap: 8px;
+    z-index: 15;
+}
+
+/* Remove the old style if it exists */
+.album-tabs .attach-btn {
+    display: none;
+}
+
+/* New styles for the URL button */
+.url-btn {
+    margin-left: auto; /* Pushes the button to the far right */
+    padding: 6px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    background-color: #FFFFFF;
+    color: #344054;
+    border: 1px solid #D0D5DD;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: background-color 0.2s;
+}
+
+.url-btn:hover {
+    background-color: #F9FAFB; /* Slight gray background on hover */
+}
+
+/* --- Add these new styles for the "Delete All" button --- */
+
+/* Wrapper to group buttons on the right side of the tabs */
+.tab-actions {
+    margin-left: auto; /* Pushes the group to the far right */
+    display: flex;
+    align-items: center;
+    gap: 12px; /* Space between buttons */
+}
+
+/* Style for the new "Delete All" button */
+.delete-all-btn {
+    padding: 6px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    background-color: #FEE4E2; /* Light red background */
+    color: #D92D20;           /* Dark red text */
+    border: 1px solid #FECDCA; /* Red border */
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.delete-all-btn:hover {
+    background-color: #D92D20; /* Darker red background on hover */
+    color: #FFFFFF;           /* White text on hover */
+}
+
+/* --- Add these new styles for the Toast Notification --- */
+
+/* --- Add/Modify these styles for the Toast Notification --- */
+
+/* --- Corrected styles for the Toast Notification --- */
+
+.toast {
+    visibility: hidden; /* Hidden by default */
+    min-width: 350px;   /* Made it a bit wider for the URL */
+    background-color: #333;
+    color: #fff;
+    text-align: center;
+    border-radius: 8px;
+    padding: 16px;
+    position: fixed;
+    z-index: 1001;
+    left: 50%;
+    top: 30px; /* Start position off-screen */
+    transform: translateX(-50%);
+    font-size: 16px;
+    opacity: 0;
+    transition: opacity 0.5s, top 0.5s;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+/* Class to show the toast */
+.toast.show {
+    visibility: visible;
+    opacity: 1;
+    top: 50px; /* Animate to this position */
+}
+
+/* Styles for the "URL Copied" text inside the toast */
+.toast p {
+    margin: 0 0 12px 0;
+    font-size: 1em;
+    font-weight: 500;
+}
+
+/* Styles for the input field that shows the URL */
+.toast input {
+    width: 100%;
+    box-sizing: border-box; /* Ensures padding doesn't break the layout */
+    padding: 8px;
+    background-color: #444;
+    border: 1px solid #555;
+    color: #fff;
+    border-radius: 6px;
+    text-align: center;
+    font-family: monospace; /* Makes the URL easier to read */
+}

@@ -22,7 +22,7 @@ class FaceMatcher:
         self.mtcnn = MTCNN(keep_all=True, device=self.device, min_face_size=40, thresholds=[0.6, 0.7, 0.7], post_process=True)
         self.inception_model = InceptionResnetV1(pretrained='vggface2').eval().to(self.device)
 
-    def preprocess_image(self, image, max_size=320):
+    def preprocess_image(self, image, max_size=640):
         # Resize image to reduce computation while maintaining aspect ratio
         h, w = image.shape[:2]
         scale = max_size / max(h, w)
@@ -63,7 +63,7 @@ class FaceMatcher:
         if os.path.exists(cache_path):
             logging.info(f"Loading embeddings from cache: {cache_path}")
             try:
-                return torch.load(cache_path)
+                return torch.load(cache_path, weights_only=False)
             except Exception as e:
                 logging.error(f"Error loading cache: {e}. Recomputing...")
         
@@ -93,7 +93,7 @@ class FaceMatcher:
         torch.save(file_embeddings, cache_path)
         return file_embeddings
 
-    def find_matches(self, user_photo_path, search_dir, output_dir, tolerance=0.5):
+    def find_matches(self, user_photo_path, search_dir, output_dir, tolerance=0.50):
         """
         Main method to find matches using cached embeddings.
         """
@@ -115,11 +115,10 @@ class FaceMatcher:
              return {"status": "error", "message": "No faces found in search directory."}
 
         # 3. Create FAISS Index for User
+        # Using IndexFlatL2 to avoid clustering warnings
         d = user_embeddings.shape[1]
-        quantizer = faiss.IndexFlatL2(d)
-        index = faiss.IndexIVFFlat(quantizer, d, 1, faiss.METRIC_L2)
-        index.train(user_embeddings)
-        index.add(user_embeddings)
+        index = faiss.IndexFlatL2(d)
+        index.add(user_embeddings.astype(np.float32))
 
         logging.info(f"Searching against {len(search_embeddings_map)} images...")
         
@@ -149,9 +148,13 @@ class FaceMatcher:
                 match_count += 1
                 matched_files.append(filename)
                 
-                # COPYING SKIP: We now serve directly from source to save time!
-                # file copying logic removed for performance
-                pass
+                # Copy matched file to output directory
+                src_path = os.path.join(search_dir, filename)
+                dst_path = os.path.join(output_dir, filename)
+                try:
+                    shutil.copy2(src_path, dst_path)
+                except Exception as e:
+                    logging.error(f"Error copying {filename}: {e}")
 
         total_time = time.time() - start_time
         logging.info(f"Completed. Found {match_count} matches in {total_time:.2f}s")

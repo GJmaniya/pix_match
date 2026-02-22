@@ -5,6 +5,7 @@ body {
     background-color: #E5E7EB;
     color: #101828;
 }
+
 /* ... (all other existing styles remain the same) ... */
 
 /* Selfie Prompt Section */
@@ -57,4 +58,37 @@ body {
     line-height: 1.5;
     margin-left: auto;
     margin-right: auto;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .sidebar-toggle {
+        display: block !important;
+    }
+
+    .header-content {
+        flex: 1;
+        display: flex;
+        align-items: center;
+    }
+
+    .header-content h2 {
+        font-size: 18px;
+        margin-left: 8px;
+    }
+
+    .selfie-prompt {
+        padding: 32px 16px;
+    }
+
+    .camera-icon-img {
+        width: 60px;
+        height: 60px;
+    }
 }

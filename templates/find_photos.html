@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Find Your Photos - {{ event.event_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='find_photos.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -58,47 +59,59 @@
         </aside>
 
         <main class="main-content">
-            <div class="content-wrapper">
-                <div class="album-header">
-                    <a href="#" class="back-link"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"
-                            xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12.5 15L7.5 10L12.5 5" stroke="#101828" stroke-width="1.67" stroke-linecap="round"
+            <header class="page-header">
+                <div class="header-content">
+                    <button class="sidebar-toggle" id="sidebarToggle" style="margin-right: 12px; display: none;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 12H21M3 6H21M3 18H21" stroke="#344054" stroke-width="2" stroke-linecap="round"
                                 stroke-linejoin="round" />
-                        </svg></a>
-                    <h2>{{ event.event_name }}</h2>
-                    <button class="options-btn"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"
-                            xmlns="http://www.w3.org/2000/svg">
-                            <path
-                                d="M10 10.833a.833.833 0 1 0 0-1.666.833.833 0 0 0 0 1.666zm0-6.667a.833.833 0 1 0 0-1.666.833.833 0 0 0 0 1.666zm0 13.334a.833.833 0 1 0 0-1.667.833.833 0 0 0 0 1.667z"
-                                stroke="#667085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg></button>
-                </div>
-
-                <section class="album-tabs">
-                    <span class="tab-item active">Album <span class="badge">1</span></span>
-                    <span class="tab-item"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"
-                            xmlns="http://www.w3.org/2000/svg" style="margin-right: 8px;">
-                            <path
-                                d="M1 2.6V13.4C1 14.28 1.72 15 2.6 15H13.4C14.28 15 15 14.28 15 13.4V2.6C15 1.72 14.28 1 13.4 1H2.6C1.72 1 1 1.72 1 2.6Z"
-                                stroke="#667085" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                            <path d="M5.8 5.8L3.4 8.2M12.6 12.6L10.6 10.6" stroke="#667085" stroke-width="1.5"
-                                stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>Photos <span class="badge">0</span></span>
-                </section>
-
-                <section class="selfie-prompt">
-                    <h2>Find your photos by clicking a selfie</h2>
-                    <button type="button" id="openCameraButton" class="camera-button">
-                        <img src="{{ url_for('static', filename='images/cam.png') }}" alt="Camera Icon"
-                            class="camera-icon-img">
+                        </svg>
                     </button>
-                    <video id="cameraFeed" autoplay playsinline
-                        style="display: none; width: 100%; max-width: 400px; border-radius: 8px; margin: 24px auto;"></video>
-                    <h3>Selfie best practice</h3>
-                    <p>For best results, please click a photo clearly showing your facial features.</p>
-                </section>
-            </div>
-        </main>
+                    <a href="{{ url_for('dashboard') }}" class="back-link">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12.5 15L7.5 10L12.5 5" stroke="#344054" stroke-width="1.66667"
+                                stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </a>
+                    <h2>Find Photos</h2>
+                </div>
+                <div class="user-profile-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                            d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21"
+                            stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        <path
+                            d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z"
+                            stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                </div>
+            </header>
+
+            <section class="album-tabs">
+                <span class="tab-item active">Album <span class="badge">1</span></span>
+                <span class="tab-item"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+                        xmlns="http://www.w3.org/2000/svg" style="margin-right: 8px;">
+                        <path
+                            d="M1 2.6V13.4C1 14.28 1.72 15 2.6 15H13.4C14.28 15 15 14.28 15 13.4V2.6C15 1.72 14.28 1 13.4 1H2.6C1.72 1 1 1.72 1 2.6Z"
+                            stroke="#667085" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="M5.8 5.8L3.4 8.2M12.6 12.6L10.6 10.6" stroke="#667085" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>Photos <span class="badge">0</span></span>
+            </section>
+
+            <section class="selfie-prompt">
+                <h2>Find your photos by clicking a selfie</h2>
+                <button type="button" id="openCameraButton" class="camera-button">
+                    <img src="{{ url_for('static', filename='images/cam.png') }}" alt="Camera Icon"
+                        class="camera-icon-img">
+                </button>
+                <video id="cameraFeed" autoplay playsinline
+                    style="display: none; width: 100%; max-width: 400px; border-radius: 8px; margin: 24px auto;"></video>
+                <h3>Selfie best practice</h3>
+                <p>For best results, please click a photo clearly showing your facial features.</p>
+            </section>
+    </div>
+    </main>
     </div>
 
     <script>
@@ -119,6 +132,26 @@
             } else {
                 alert("Camera access is not supported by your browser.");
             }
+        });
+
+        // Mobile Sidebar Toggle
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const sidebar = document.querySelector('.sidebar');
+        const overlay = document.createElement('div');
+        overlay.className = 'sidebar-overlay';
+        document.body.appendChild(overlay);
+
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+                sidebar.classList.toggle('show');
+                overlay.classList.toggle('show');
+            });
+        }
+
+        overlay.addEventListener('click', function () {
+            sidebar.classList.remove('show');
+            overlay.classList.remove('show');
         });
     </script>
 </body>

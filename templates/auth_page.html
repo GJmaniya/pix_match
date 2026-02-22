@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Access - {{ event.event_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='auth_modal.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+
+        .auth-overlay {
+            position: fixed;
+            animation: none;
+        }
+
+        .auth-background {
+            filter: blur(15px);
+            opacity: 0.4;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="auth-overlay">
+        <!-- Background with event cover -->
+        <div class="auth-background"
+            style="background-image: url('{{ url_for('static', filename='uploads/' + (event.cover_photo if event.cover_photo else 'default-cover.jpg')) }}');">
+        </div>
+
+        <div class="auth-container">
+            <!-- Left Side - Event Details with Cover Photo Background -->
+            <div class="auth-left"
+                style="background-image: url('{{ url_for('static', filename='uploads/' + (event.cover_photo if event.cover_photo else 'default-cover.jpg')) }}');">
+                <div class="event-card">
+                    <div class="event-logo">
+                        <img src="{{ url_for('static', filename='uploads/' + (event.cover_photo if event.cover_photo else 'default-cover.jpg')) }}"
+                            alt="Event">
+                    </div>
+                    <div class="event-info">
+                        <h1 class="event-date">{{ event.event_date if event.event_date else 'Event Date' }}</h1>
+                        <h2 class="event-title">{{ event.event_name }}</h2>
+                        <p class="event-subtitle">Photo Gallery</p>
+                    </div>
+                    <div class="event-badge">Public Group</div>
+                </div>
+            </div>
+
+            <!-- Right Side - Authentication Forms -->
+            <div class="auth-right">
+                <!-- Step 1: Contact Input -->
+                <div id="contactStep" class="auth-step">
+                    <h2>Verification</h2>
+                    <p class="auth-subtitle">Enter your email or phone number to access photos</p>
+
+                    <div class="auth-form">
+                        <input type="text" id="contactInput" placeholder="Email or Phone Number" autocomplete="off">
+                    </div>
+
+                    <button class="auth-btn" id="sendOtpBtn">
+                        <span class="btn-text">Send OTP</span>
+                        <span class="btn-loader" style="display: none;">⏳</span>
+                    </button>
+
+                    <p class="auth-error" id="contactError" style="display: none;"></p>
+                </div>
+
+                <!-- Step 2: OTP Verification -->
+                <div id="otpStep" class="auth-step" style="display: none;">
+                    <h2>Verification</h2>
+                    <p class="auth-subtitle">Enter the OTP sent to <strong id="contactDisplay"></strong></p>
+
+                    <div class="otp-boxes">
+                        <input type="text" maxlength="1" class="otp-box" data-index="0" inputmode="numeric">
+                        <input type="text" maxlength="1" class="otp-box" data-index="1" inputmode="numeric">
+                        <input type="text" maxlength="1" class="otp-box" data-index="2" inputmode="numeric">
+                        <input type="text" maxlength="1" class="otp-box" data-index="3" inputmode="numeric">
+                        <input type="text" maxlength="1" class="otp-box" data-index="4" inputmode="numeric">
+                        <input type="text" maxlength="1" class="otp-box" data-index="5" inputmode="numeric">
+                    </div>
+
+                    <button class="auth-btn" id="verifyOtpBtn">
+                        <span class="btn-text">Continue</span>
+                        <span class="btn-loader" style="display: none;">⏳</span>
+                    </button>
+
+                    <div class="auth-links">
+                        <a href="#" id="resendOtpBtn">Resend OTP</a>
+                        <span>or</span>
+                        <a href="#" id="changeContactBtn">Change Contact</a>
+                    </div>
+
+                    <p class="auth-error" id="otpError" style="display: none;"></p>
+                    <p class="auth-success" id="otpSuccess" style="display: none;"></p>
+                </div>
+
+                <!-- Step 3: User Information -->
+                <div id="userInfoStep" class="auth-step" style="display: none;">
+                    <h2>Complete Your Profile</h2>
+                    <p class="auth-subtitle">Enter your details to continue</p>
+
+                    <div class="auth-form">
+                        <input type="text" id="firstNameInput" placeholder="First Name" autocomplete="given-name">
+                        <input type="text" id="lastNameInput" placeholder="Last Name" autocomplete="family-name">
+
+                        <!-- Dynamic field: Email if logged in with phone, Phone if logged in with email -->
+                        <input type="email" id="emailInput" placeholder="Email Address" autocomplete="email"
+                            style="display: none;">
+                        <input type="tel" id="phoneInput" placeholder="Phone Number" autocomplete="tel"
+                            style="display: none;">
+                    </div>
+
+                    <button class="auth-btn" id="submitUserInfoBtn">
+                        <span class="btn-text">Access Photos</span>
+                        <span class="btn-loader" style="display: none;">⏳</span>
+                    </button>
+
+                    <p class="auth-footer">
+                        By continuing you agree with our <a href="#">Terms of Service</a> and <a href="#">Privacy
+                            Policy</a>
+                    </p>
+
+                    <p class="auth-error" id="userInfoError" style="display: none;"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const eventId = {{ event_id }};
+        let currentContact = '';
+
+        // Helper functions
+        function showError(element, message) {
+            element.textContent = message;
+            element.style.display = 'block';
+        }
+
+        function showSuccess(element, message) {
+            element.textContent = message;
+            element.style.display = 'block';
+        }
+
+        function setLoading(button, isLoading) {
+            const text = button.querySelector('.btn-text');
+            const loader = button.querySelector('.btn-loader');
+            if (isLoading) {
+                text.style.display = 'none';
+                loader.style.display = 'inline';
+                button.disabled = true;
+            } else {
+                text.style.display = 'inline';
+                loader.style.display = 'none';
+                button.disabled = false;
+            }
+        }
+
+        // Get elements
+        const contactStep = document.getElementById('contactStep');
+        const otpStep = document.getElementById('otpStep');
+        const userInfoStep = document.getElementById('userInfoStep');
+
+        const contactInput = document.getElementById('contactInput');
+        const sendOtpBtn = document.getElementById('sendOtpBtn');
+        const contactError = document.getElementById('contactError');
+
+        const otpBoxes = document.querySelectorAll('.otp-box');
+        const verifyOtpBtn = document.getElementById('verifyOtpBtn');
+        const resendOtpBtn = document.getElementById('resendOtpBtn');
+        const changeContactBtn = document.getElementById('changeContactBtn');
+        const contactDisplay = document.getElementById('contactDisplay');
+        const otpError = document.getElementById('otpError');
+        const otpSuccess = document.getElementById('otpSuccess');
+
+        const firstNameInput = document.getElementById('firstNameInput');
+        const lastNameInput = document.getElementById('lastNameInput');
+        const emailInput = document.getElementById('emailInput');
+        const submitUserInfoBtn = document.getElementById('submitUserInfoBtn');
+        const userInfoError = document.getElementById('userInfoError');
+
+        // Send OTP
+        sendOtpBtn.addEventListener('click', async function () {
+            const contact = contactInput.value.trim();
+
+            if (!contact) {
+                showError(contactError, '⚠️ Please enter your email or phone number');
+                return;
+            }
+
+            if (!contact.includes('@') && !contact.match(/^\+?\d{10,}$/)) {
+                showError(contactError, '⚠️ Please enter a valid email or phone number');
+                return;
+            }
+
+            setLoading(sendOtpBtn, true);
+            contactError.style.display = 'none';
+
+            try {
+                const response = await fetch(`/request_otp/${eventId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contact: contact })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentContact = contact;
+                    contactDisplay.textContent = contact;
+                    contactStep.style.display = 'none';
+                    otpStep.style.display = 'block';
+                    otpBoxes[0].focus();
+
+                    if (data.message && data.message.includes('dev mode')) {
+                        showSuccess(otpSuccess, data.message);
+                    }
+                } else {
+                    showError(contactError, '❌ ' + (data.error || 'Failed to send OTP'));
+                }
+            } catch (error) {
+                showError(contactError, '❌ Connection error. Please try again.');
+            } finally {
+                setLoading(sendOtpBtn, false);
+            }
+        });
+
+        // OTP Box auto-advance
+        otpBoxes.forEach((box, index) => {
+            box.addEventListener('input', function (e) {
+                if (this.value.length === 1 && index < otpBoxes.length - 1) {
+                    otpBoxes[index + 1].focus();
+                }
+            });
+
+            box.addEventListener('keydown', function (e) {
+                if (e.key === 'Backspace' && !this.value && index > 0) {
+                    otpBoxes[index - 1].focus();
+                }
+            });
+        });
+
+        // Verify OTP
+        verifyOtpBtn.addEventListener('click', async function () {
+            const otp = Array.from(otpBoxes).map(box => box.value).join('');
+
+            if (otp.length !== 6) {
+                showError(otpError, '⚠️ Please enter all 6 digits');
+                return;
+            }
+
+            setLoading(verifyOtpBtn, true);
+            otpError.style.display = 'none';
+            otpSuccess.style.display = 'none';
+
+            try {
+                const response = await fetch(`/verify_otp/${eventId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contact: currentContact, otp_code: otp })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Check if returning user
+                    if (data.returning_user) {
+                        // Returning user - redirect directly to photos
+                        showSuccess(otpSuccess, `✓ Welcome back, ${data.user_name}!`);
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    } else {
+                        // New user - show user info form
+                        showSuccess(otpSuccess, '✓ Verified!');
+                        setTimeout(() => {
+                            otpStep.style.display = 'none';
+                            userInfoStep.style.display = 'block';
+
+                            // Show appropriate field based on login method
+                            const emailInput = document.getElementById('emailInput');
+                            const phoneInput = document.getElementById('phoneInput');
+
+                            if (currentContact.includes('@')) {
+                                // Logged in with email - ask for phone
+                                emailInput.style.display = 'none';
+                                phoneInput.style.display = 'block';
+                                phoneInput.required = true;
+                            } else {
+                                // Logged in with phone - ask for email
+                                phoneInput.style.display = 'none';
+                                emailInput.style.display = 'block';
+                                emailInput.required = true;
+                            }
+
+                            firstNameInput.focus();
+                        }, 800);
+                    }
+                } else {
+                    showError(otpError, '❌ ' + (data.error || 'Invalid code'));
+                    otpBoxes.forEach(box => box.value = '');
+                    otpBoxes[0].focus();
+                }
+            } catch (error) {
+                showError(otpError, '❌ Connection error. Please try again.');
+            } finally {
+                setLoading(verifyOtpBtn, false);
+            }
+        });
+
+        // Resend OTP
+        resendOtpBtn.addEventListener('click', async function (e) {
+            e.preventDefault();
+
+            try {
+                const response = await fetch(`/request_otp/${eventId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contact: currentContact })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(otpSuccess, '✓ New OTP sent!');
+                    if (data.message && data.message.includes('dev mode')) {
+                        showSuccess(otpSuccess, data.message);
+                    }
+                } else {
+                    showError(otpError, '❌ Failed to resend OTP');
+                }
+            } catch (error) {
+                showError(otpError, '❌ Connection error');
+            }
+        });
+
+        // Change contact
+        changeContactBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            otpStep.style.display = 'none';
+            contactStep.style.display = 'block';
+            contactInput.value = '';
+            contactInput.focus();
+        });
+
+        // Submit user info
+        submitUserInfoBtn.addEventListener('click', async function () {
+            const firstName = firstNameInput.value.trim();
+            const lastName = lastNameInput.value.trim();
+            const emailInputEl = document.getElementById('emailInput');
+            const phoneInputEl = document.getElementById('phoneInput');
+
+            let email = '';
+            let phone = '';
+
+            // Determine which field to validate based on login method
+            if (currentContact.includes('@')) {
+                // Logged in with email, need phone
+                email = currentContact;
+                phone = phoneInputEl.value.trim();
+
+                if (!firstName || !lastName || !phone) {
+                    showError(userInfoError, '⚠️ All fields are required');
+                    return;
+                }
+            } else {
+                // Logged in with phone, need email
+                phone = currentContact;
+                email = emailInputEl.value.trim();
+
+                if (!firstName || !lastName || !email) {
+                    showError(userInfoError, '⚠️ All fields are required');
+                    return;
+                }
+            }
+
+            setLoading(submitUserInfoBtn, true);
+            userInfoError.style.display = 'none';
+
+            try {
+                const response = await fetch(`/save_guest_info/${eventId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        first_name: firstName,
+                        last_name: lastName,
+                        email: email,
+                        phone: phone,
+                        contact: currentContact
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Information saved! Redirecting to photos...');
+
+                    // Reload the current page - auth_event will now show photos since session is set
+                    window.location.reload();
+                } else {
+                    alert(data.error || 'Failed to save information');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            } finally {
+                setLoading(submitUserInfoBtn, false);
+            }
+        });
+
+        // Enter key support
+        contactInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') sendOtpBtn.click();
+        });
+    </script>
+</body>
+
+</html>

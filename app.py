@@ -12,14 +12,40 @@ from werkzeug.utils import secure_filename
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport import requests as grequests
 from flask import jsonify
+from flask_mail import Mail, Message
 from matcher import FaceMatcher
+import random
+import string
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.secret_key = '123456'
 
+# Email Configuration for OTP
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'your-email@gmail.com')  # Set via environment variable
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'your-app-password')  # Set via environment variable
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'your-email@gmail.com')
+
+mail = Mail(app)
+
 # Initialize FaceMatcher (Global singleton)
 # Try to use GPU if available
 matcher = FaceMatcher(device_choice='gpu')
+
+# Database paths
+THIRDUSER_DB = 'thirduser.db'
+
+# Helper function to generate device ID
+def generate_device_id(request):
+    """Generate a unique device ID based on user agent and IP address"""
+    import hashlib
+    user_agent = request.headers.get('User-Agent', '')
+    ip_address = request.remote_addr
+    device_string = f"{user_agent}_{ip_address}"
+    return hashlib.sha256(device_string.encode()).hexdigest()
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'database.db')
 CLIENT_SECRETS_FILE = os.path.join(os.path.dirname(__file__), 'client_secrets.json')
@@ -177,12 +203,20 @@ def dashboard():
     user_id = session['user_id']
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
-    cursor.execute('SELECT first_name FROM users WHERE id = ?', (user_id,))
-    user_first_name = cursor.fetchone()[0]
+    cursor.execute('SELECT first_name, last_name, username FROM users WHERE id = ?', (user_id,))
+    user_data = cursor.fetchone()
+    user_first_name = user_data[0]
+    user_last_name = user_data[1]
+    username = user_data[2]
     cursor.execute('SELECT id, event_name, event_date, cover_photo FROM events WHERE user_id = ?', (user_id,))
     events = cursor.fetchall()
     conn.close()
-    return render_template('dashboard.html', user_first_name=user_first_name, events=events)
+    return render_template('dashboard.html', user_first_name=user_first_name, user_last_name=user_last_name, username=username, events=events)
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('home'))
 
 # --- Authentication Routes ---
 @app.route('/login', methods=['GET', 'POST'])
@@ -233,20 +267,28 @@ def create_event():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     if request.method == 'POST':
+        event_name = request.form['event_name']
+        
         # Handle cover photo upload
         cover_photo_filename = None
         if 'cover_photo' in request.files:
             file = request.files['cover_photo']
             if file and file.filename != '' and allowed_file(file.filename):
+                # Create event-specific folder
+                event_folder = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(event_name))
+                os.makedirs(event_folder, exist_ok=True)
+                
                 filename = secure_filename(file.filename)
                 # Add timestamp to make filename unique
                 import uuid
                 unique_filename = f"{uuid.uuid4().hex}_{filename}"
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_filename))
-                cover_photo_filename = unique_filename
+                file.save(os.path.join(event_folder, unique_filename))
+                
+                # Store relative path: event_name/filename
+                cover_photo_filename = f"{secure_filename(event_name)}/{unique_filename}"
         
         session['event_details'] = {
-            'event_name': request.form['event_name'],
+            'event_name': event_name,
             'event_date': request.form['event_date'],
             'event_venue': request.form['event_venue'],
             'event_category': request.form['event_category'],
@@ -283,11 +325,11 @@ def add_album(event_id):
         return redirect(url_for('login'))
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
-    cursor.execute("SELECT event_name FROM events WHERE id = ? AND user_id = ?", (event_id, session['user_id']))
+    cursor.execute("SELECT event_name, cover_photo FROM events WHERE id = ? AND user_id = ?", (event_id, session['user_id']))
     event = cursor.fetchone()
     conn.close()
     if event:
-        return render_template('add_album.html', event_name=event[0], event_id=event_id)
+        return render_template('add_album.html', event_name=event[0], cover_photo=event[1], event_id=event_id)
     return redirect(url_for('dashboard'))
 
 @app.route('/album/<int:event_id>')
@@ -318,14 +360,34 @@ def upload_photos(event_id):
     if 'photos' not in request.files:
         return redirect(url_for('view_album', event_id=event_id))
     
-    files = request.files.getlist('photos')
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
+    
+    # Get event name for folder
+    cursor.execute("SELECT event_name FROM events WHERE id = ?", (event_id,))
+    event = cursor.fetchone()
+    if not event:
+        conn.close()
+        return "Event not found", 404
+    
+    event_name = event[0]
+    print(f"DEBUG: Uploading photos for event '{event_name}' (ID: {event_id})")
+    
+    # Create event-specific folder
+    folder_name = secure_filename(event_name)
+    event_folder = os.path.join(app.config['UPLOAD_FOLDER'], folder_name)
+    print(f"DEBUG: Event folder path: {event_folder}")
+    os.makedirs(event_folder, exist_ok=True)
+    
+    files = request.files.getlist('photos')
     for file in files:
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            cursor.execute("INSERT INTO photos (event_id, filename) VALUES (?, ?)", (event_id, filename))
+            file.save(os.path.join(event_folder, filename))
+            
+            # Store relative path: event_name/filename
+            relative_path = f"{secure_filename(event_name)}/{filename}"
+            cursor.execute("INSERT INTO photos (event_id, filename) VALUES (?, ?)", (event_id, relative_path))
     conn.commit()
     conn.close()
     return redirect(url_for('view_album', event_id=event_id))
@@ -457,17 +519,319 @@ def find_photos(event_id):
         return "Event not found", 404
 
 
+@app.route('/guest_signup/<int:event_id>', methods=['POST'])
+def guest_signup(event_id):
+    email = request.form.get('email', '').strip()
+    phone = request.form.get('phone', '').strip()
+    
+    # Validate at least one is provided
+    if not email and not phone:
+        return jsonify({'error': 'Email or phone number required'}), 400
+    
+    # Store in database
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO guest_users (event_id, email, phone)
+        VALUES (?, ?, ?)
+    ''', (event_id, email if email else None, phone if phone else None))
+    conn.commit()
+    conn.close()
+    
+    # Set session
+    session[f'guest_auth_{event_id}'] = True
+    if email:
+        session[f'guest_email_{event_id}'] = email
+    if phone:
+        session[f'guest_phone_{event_id}'] = phone
+    
+    return jsonify({'success': True})
+
+
+# OTP Authentication Routes
+def generate_otp():
+    """Generate a 6-digit OTP code"""
+    return ''.join(random.choices(string.digits, k=6))
+
+
+@app.route('/request_otp/<int:event_id>', methods=['POST'])
+def request_otp(event_id):
+    """Generate and send OTP to email or phone"""
+    data = request.get_json()
+    contact = data.get('contact', '').strip()
+    
+    if not contact:
+        return jsonify({'error': 'Email or phone number required'}), 400
+    
+    # Generate OTP
+    otp_code = generate_otp()
+    
+    # Set expiration time (10 minutes from now)
+    expires_at = datetime.now() + timedelta(minutes=10)
+    
+    # Store OTP in database
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    
+    # Delete any existing unverified OTPs for this contact and event
+    cursor.execute('''
+        DELETE FROM otp_codes 
+        WHERE event_id = ? AND contact = ? AND verified = 0
+    ''', (event_id, contact))
+    
+    # Insert new OTP
+    cursor.execute('''
+        INSERT INTO otp_codes (event_id, contact, otp_code, expires_at)
+        VALUES (?, ?, ?, ?)
+    ''', (event_id, contact, otp_code, expires_at))
+    
+    conn.commit()
+    conn.close()
+    
+    # Send OTP via email or SMS
+    if '@' in contact:  # Email
+        try:
+            msg = Message(
+                subject='Your PixMatch OTP Code',
+                recipients=[contact],
+                body=f'Your OTP code is: {otp_code}\n\nThis code will expire in 10 minutes.\n\nIf you did not request this code, please ignore this email.'
+            )
+            mail.send(msg)
+            return jsonify({'success': True, 'message': 'OTP sent to your email'})
+        except Exception as e:
+            print(f"Email error: {e}")
+            # For development, return OTP in response (REMOVE IN PRODUCTION)
+            return jsonify({'success': True, 'message': f'OTP (dev mode): {otp_code}'})
+    else:  # Phone (SMS - placeholder)
+        # TODO: Implement SMS sending with Twilio or similar service
+        # For now, return OTP in response for development
+        return jsonify({'success': True, 'message': f'SMS not configured. OTP (dev mode): {otp_code}'})
+
+
+@app.route('/verify_otp/<int:event_id>', methods=['POST'])
+def verify_otp(event_id):
+    """Verify OTP code"""
+    data = request.get_json()
+    contact = data.get('contact', '').strip()
+    otp_code = data.get('otp_code', '').strip()
+    
+    if not contact or not otp_code:
+        return jsonify({'error': 'Contact and OTP code required'}), 400
+    
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    
+    # Find valid OTP
+    cursor.execute('''
+        SELECT id, otp_code, expires_at FROM otp_codes
+        WHERE event_id = ? AND contact = ? AND verified = 0
+        ORDER BY created_at DESC LIMIT 1
+    ''', (event_id, contact))
+    
+    otp_record = cursor.fetchone()
+    
+    if not otp_record:
+        conn.close()
+        return jsonify({'error': 'No OTP found. Please request a new one.'}), 400
+    
+    otp_id, stored_otp, expires_at = otp_record
+    
+    # Check if OTP has expired
+    if datetime.now() > datetime.fromisoformat(expires_at):
+        conn.close()
+        return jsonify({'error': 'OTP has expired. Please request a new one.'}), 400
+    
+    # Verify OTP
+    if otp_code != stored_otp:
+        conn.close()
+        return jsonify({'error': 'Invalid OTP code'}), 400
+    
+    # Mark OTP as verified
+    cursor.execute('UPDATE otp_codes SET verified = 1 WHERE id = ?', (otp_id,))
+    
+    # Check if this user already exists (returning user)
+    cursor.execute('''
+        SELECT id, first_name, last_name, email, phone 
+        FROM guest_users 
+        WHERE event_id = ? AND (email = ? OR phone = ?)
+    ''', (event_id, contact, contact))
+    
+    existing_user = cursor.fetchone()
+    
+    conn.commit()
+    conn.close()
+    
+    # Set session
+    session[f'otp_verified_{event_id}'] = True
+    session[f'otp_contact_{event_id}'] = contact
+    
+    if existing_user:
+        # Returning user - auto-complete their info
+        user_id, first_name, last_name, email, phone = existing_user
+        session[f'guest_info_complete_{event_id}'] = True
+        session[f'guest_name_{event_id}'] = f'{first_name} {last_name}'
+        session[f'guest_email_{event_id}'] = email or phone
+        
+        return jsonify({
+            'success': True, 
+            'message': 'OTP verified successfully',
+            'returning_user': True,
+            'user_name': f'{first_name} {last_name}'
+        })
+    else:
+        # New user - needs to fill in details
+        return jsonify({
+            'success': True, 
+            'message': 'OTP verified successfully',
+            'returning_user': False
+        })
+
+
+@app.route('/save_guest_info/<int:event_id>', methods=['POST'])
+def save_guest_info(event_id):
+    """Save guest user information after OTP verification"""
+    data = request.get_json()
+    first_name = data.get('first_name', '').strip()
+    last_name = data.get('last_name', '').strip()
+    email = data.get('email', '').strip()
+    phone = data.get('phone', '').strip()
+    contact = data.get('contact', '').strip()
+    
+    if not first_name or not last_name:
+        return jsonify({'error': 'First and last name are required'}), 400
+    
+    if not email and not phone:
+        return jsonify({'error': 'Either email or phone is required'}), 400
+    
+    # Check if OTP was verified for this event
+    if not session.get(f'otp_verified_{event_id}'):
+        return jsonify({'error': 'OTP verification required'}), 403
+    
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    
+    # Determine final email and phone
+    final_email = email if email else None
+    final_phone = phone if phone else None
+    
+    # Check if guest already exists
+    cursor.execute('''
+        SELECT id FROM guest_users 
+        WHERE event_id = ? AND (email = ? OR phone = ?)
+    ''', (event_id, final_email or '', final_phone or ''))
+    
+    existing_guest = cursor.fetchone()
+    
+    if existing_guest:
+        # Update existing guest
+        cursor.execute('''
+            UPDATE guest_users 
+            SET first_name = ?, last_name = ?, email = ?, phone = ?
+            WHERE id = ?
+        ''', (first_name, last_name, final_email, final_phone, existing_guest[0]))
+    else:
+        # Insert new guest
+        cursor.execute('''
+            INSERT INTO guest_users (event_id, first_name, last_name, email, phone)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (event_id, first_name, last_name, final_email, final_phone))
+    
+    conn.commit()
+    conn.close()
+    
+    # Get device ID from session
+    device_id = session.get(f'device_id_{event_id}')
+    if not device_id:
+        device_id = generate_device_id(request)
+        session[f'device_id_{event_id}'] = device_id
+    
+    # Save to thirduser database for visit tracking
+    try:
+        conn_third = sqlite3.connect(THIRDUSER_DB)
+        cursor_third = conn_third.cursor()
+        
+        cursor_third.execute('''
+            INSERT INTO guest_visitors (event_id, first_name, last_name, email, phone, device_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (event_id, first_name, last_name, final_email, final_phone, device_id))
+        
+        conn_third.commit()
+        conn_third.close()
+    except sqlite3.IntegrityError:
+        # User already registered, ignore
+        pass
+    except Exception as e:
+        print(f"Error saving to thirduser DB: {e}")
+    
+    # Mark as fully authenticated
+    session[f'guest_info_complete_{event_id}'] = True
+    session[f'guest_name_{event_id}'] = f'{first_name} {last_name}'
+    session[f'guest_email_{event_id}'] = final_email or final_phone
+    
+    return jsonify({'success': True, 'message': 'Information saved successfully'})
+
+
 # --- Add this new route for the public, shareable event page ---
+
+
+@app.route('/auth/event/<int:event_id>')
+def auth_event(event_id):
+    """Standalone authentication page for event access"""
+    # Generate device ID for this visitor (for tracking purposes only)
+    device_id = generate_device_id(request)
+    session[f'device_id_{event_id}'] = device_id
+    
+    # Check if already authenticated in current session
+    if session.get(f'otp_verified_{event_id}') and session.get(f'guest_info_complete_{event_id}'):
+                                # Already authenticated - fetch event and photos, then show share page
+        conn = sqlite3.connect('database.db')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Fetch event details
+        cursor.execute("SELECT event_name, privacy, event_date, cover_photo FROM events WHERE id = ?", (event_id,))
+        event = cursor.fetchone()
+        
+        # Fetch photos for this event
+        cursor.execute("SELECT filename FROM photos WHERE event_id = ?", (event_id,))
+        photos = cursor.fetchall()
+        conn.close()
+        
+        return render_template('share_page.html', event=event, photos=photos, event_id=event_id, otp_verified=True)
+    
+    # Show authentication page
+    conn = sqlite3.connect('database.db')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # Fetch event details
+    cursor.execute("SELECT event_name, event_date, cover_photo FROM events WHERE id = ?", (event_id,))
+    event = cursor.fetchone()
+    conn.close()
+    
+    if event:
+        return render_template('auth_page.html', event=event, event_id=event_id)
+    else:
+        return "Event not found.", 404
+
 
 @app.route('/share/event/<int:event_id>')
 def share_event(event_id):
+    # Clear any existing guest authentication for this event
+    # This ensures users must login every time they access the share link
+    session.pop(f'otp_verified_{event_id}', None)
+    session.pop(f'guest_info_complete_{event_id}', None)
+    session.pop(f'guest_name_{event_id}', None)
+    session.pop(f'guest_email_{event_id}', None)
+    session.pop(f'otp_contact_{event_id}', None)
+    
     conn = sqlite3.connect('database.db')
     # Use row_factory to get results as dictionaries for easy access in the template
     conn.row_factory = sqlite3.Row 
     cursor = conn.cursor()
 
-    # Fetch event details including privacy setting
-    cursor.execute("SELECT event_name, privacy FROM events WHERE id = ?", (event_id,))
+    # Fetch event details including privacy setting, date, and cover photo
+    cursor.execute("SELECT event_name, privacy, event_date, cover_photo FROM events WHERE id = ?", (event_id,))
     event = cursor.fetchone()
 
     # Fetch all photos for this event
@@ -477,12 +841,13 @@ def share_event(event_id):
     conn.close()
 
     if event:
-        # We will create a new template for this public page
-        return render_template('share_page.html', event=event, photos=photos)
+        # Always redirect to auth page first for share links
+        # This ensures guests must authenticate even if they have other sessions
+        return redirect(url_for('auth_event', event_id=event_id))
     else:
         # If the event doesn't exist, show a "Not Found" error
         return "Event not found.", 404
-        return "Event not found.", 404
+
 
 # --- API Route for Photo Matching ---
 @app.route('/api/match_photos', methods=['POST'])
@@ -501,20 +866,43 @@ def match_photos_api():
         file.save(user_photo_path)
         
         # Define directories
-        # Using Bhuman as the source directory as identified
         base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Default to Bhuman if no event specified (backward compatibility)
         search_dir = os.path.join(base_dir, 'Bhuman') 
+        
+        # Check if event_id is provided
+        event_id = request.form.get('event_id')
+        if event_id:
+            conn = sqlite3.connect('database.db')
+            cursor = conn.cursor()
+            cursor.execute("SELECT event_name FROM events WHERE id = ?", (event_id,))
+            event = cursor.fetchone()
+            conn.close()
+            
+            if event:
+                event_name = event[0]
+                # Use the event's upload folder
+                search_dir = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(event_name))
+                print(f"DEBUG: Searching in event folder: {search_dir}")
+        else:
+            print("DEBUG: searching in default Bhuman folder")
+
+        match_output_dir = os.path.join(base_dir, 'matchphotos')
         match_output_dir = os.path.join(base_dir, 'matchphotos')
         
         # Run matching
         try:
             # Clear matchphotos directory before starting a new search
             if os.path.exists(match_output_dir):
+                import shutil
                 for f in os.listdir(match_output_dir):
                     file_path = os.path.join(match_output_dir, f)
                     try:
-                        if os.path.isfile(file_path):
-                            os.remove(file_path)
+                        if os.path.isfile(file_path) or os.path.islink(file_path):
+                            os.unlink(file_path)
+                        elif os.path.isdir(file_path):
+                            shutil.rmtree(file_path)
                     except Exception as e:
                         app.logger.error(f"Error clearing matchphotos file {f}: {e}")
             else:
@@ -524,7 +912,7 @@ def match_photos_api():
                 user_photo_path, 
                 search_dir, 
                 match_output_dir,
-                tolerance=0.50
+                tolerance=0.60
             )
             
             # Remove temp file
@@ -541,7 +929,7 @@ def match_photos_api():
     return jsonify({'status': 'error', 'message': 'Invalid file type'}), 400
 
 # --- Route to serve matched photos ---
-@app.route('/matchphotos/<filename>')
+@app.route('/matchphotos/<path:filename>')
 def serve_matched_photo(filename):
     """Serve matched photos from the matchphotos directory"""
     from flask import send_from_directory

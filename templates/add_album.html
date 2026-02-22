@@ -62,6 +62,12 @@
         <main class="main-content">
             <div class="form-container">
                 <div class="form-header">
+                    <button class="sidebar-toggle" id="sidebarToggle" style="margin-right: 12px;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 12H21M3 6H21M3 18H21" stroke="#344054" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round" />
+                        </svg>
+                    </button>
                     <a href="{{ url_for('dashboard') }}" class="back-link">
                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M12.5 15L7.5 10L12.5 5" stroke="#344054" stroke-width="1.66667"
@@ -69,19 +75,6 @@
                         </svg>
                     </a>
                     <h2>Add Album</h2>
-                    <button class="options-btn">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path
-                                d="M10.0003 10.8333C10.4606 10.8333 10.8337 10.4602 10.8337 9.99996C10.8337 9.53972 10.4606 9.16663 10.0003 9.16663C9.54009 9.16663 9.16699 9.53972 9.16699 9.99996C9.16699 10.4602 9.54009 10.8333 10.0003 10.8333Z"
-                                stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                            <path
-                                d="M10.0003 4.16663C10.4606 4.16663 10.8337 3.79354 10.8337 3.33329C10.8337 2.87305 10.4606 2.5 10.0003 2.5C9.54009 2.5 9.16699 2.87305 9.16699 3.33329C9.16699 3.79354 9.54009 4.16663 10.0003 4.16663Z"
-                                stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                            <path
-                                d="M10.0003 17.5C10.4606 17.5 10.8337 17.1269 10.8337 16.6666C10.8337 16.2064 10.4606 15.8333 10.0003 15.8333C9.54009 15.8333 9.16699 16.2064 9.16699 16.6666C9.16699 17.1269 9.54009 17.5 10.0003 17.5Z"
-                                stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>
-                    </button>
                 </div>
 
                 <section class="album-details">
@@ -96,7 +89,14 @@
 
                     <a href="{{ url_for('view_album', event_id=event_id) }}" class="album-link">
                         <div class="album-card">
+                            {% if cover_photo %}
+                            <div class="album-cover-photo">
+                                <img src="{{ url_for('static', filename='uploads/' + cover_photo) }}"
+                                    alt="{{ event_name }}">
+                            </div>
+                            {% else %}
                             <h3>{{ event_name }}</h3>
+                            {% endif %}
 
                             <div class="card-footer">
                                 <button class="icon-btn" title="Download">
@@ -111,7 +111,7 @@
                                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
                                         xmlns="http://www.w3.org/2000/svg">
                                         <path
-                                            d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                                            d="M20.84 4.60987C20.3292 4.099 19.7228 3.69364 19.0554 3.41708C18.3879 3.14052 17.6725 2.99805 16.95 2.99805C16.2275 2.99805 15.5121 3.14052 14.8446 3.41708C14.1772 3.69364 13.5708 4.099 13.06 4.60987L12 5.66987L10.94 4.60987C9.9083 3.57816 8.50903 2.99858 7.05 2.99858C5.59096 2.99858 4.19169 3.57816 3.16 4.60987C2.1283 5.64156 1.54872 7.04084 1.54872 8.49987C1.54872 9.95891 2.1283 11.3582 3.16 12.3899L4.22 13.4499L12 21.2299L19.78 13.4499L20.84 12.3899C21.3508 11.8791 21.7562 11.2727 22.0327 10.6052C22.3093 9.93777 22.4518 9.22236 22.4518 8.49987C22.4518 7.77738 22.3093 7.06198 22.0327 6.39452C21.7562 5.72706 21.3508 5.12065 20.84 4.60987Z"
                                             stroke="#667085" stroke-width="2" stroke-linecap="round"
                                             stroke-linejoin="round" />
                                     </svg>
@@ -119,8 +119,7 @@
                                 <button class="icon-btn" title="Share">
                                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
                                         xmlns="http://www.w3.org/2000/svg">
-                                        <path
-                                            d="M18 8a6 6 0 0 0-5.32 3.51l-4.24-2.12A6.02 6.02 0 0 0 6 9a6 6 0 1 0 0 6 6.02 6.02 0 0 0 2.44-.51l4.24 2.12A6 6 0 1 0 18 8z"
+                                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8m-4-6-4-4-4 4m4-4v13"
                                             stroke="#667085" stroke-width="2" stroke-linecap="round"
                                             stroke-linejoin="round" />
                                     </svg>
@@ -132,6 +131,27 @@
             </div>
         </main>
     </div>
+    <script>
+        // Mobile Sidebar Toggle
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const sidebar = document.querySelector('.sidebar');
+        const overlay = document.createElement('div');
+        overlay.className = 'sidebar-overlay';
+        document.body.appendChild(overlay);
+
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+                sidebar.classList.toggle('show');
+                overlay.classList.toggle('show');
+            });
+        }
+
+        overlay.addEventListener('click', function () {
+            sidebar.classList.remove('show');
+            overlay.classList.remove('show');
+        });
+    </script>
 </body>
 
 </html>

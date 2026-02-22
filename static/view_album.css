@@ -170,7 +170,8 @@
 }
 
 .delete-btn {
-    background-color: rgba(220, 38, 38, 0.7); /* Red background */
+    background-color: rgba(220, 38, 38, 0.7);
+    /* Red background */
     border: 1px solid rgba(255, 255, 255, 0.5);
     border-radius: 50%;
     width: 32px;
@@ -181,7 +182,8 @@
 }
 
 .delete-btn:hover {
-    background-color: rgba(220, 38, 38, 0.9); /* Darker red on hover */
+    background-color: rgba(220, 38, 38, 0.9);
+    /* Darker red on hover */
 }
 
 .photo-actions {
@@ -200,7 +202,8 @@
 
 /* New styles for the URL button */
 .url-btn {
-    margin-left: auto; /* Pushes the button to the far right */
+    margin-left: auto;
+    /* Pushes the button to the far right */
     padding: 6px 14px;
     font-size: 14px;
     font-weight: 500;
@@ -213,17 +216,20 @@
 }
 
 .url-btn:hover {
-    background-color: #F9FAFB; /* Slight gray background on hover */
+    background-color: #F9FAFB;
+    /* Slight gray background on hover */
 }
 
 /* --- Add these new styles for the "Delete All" button --- */
 
 /* Wrapper to group buttons on the right side of the tabs */
 .tab-actions {
-    margin-left: auto; /* Pushes the group to the far right */
+    margin-left: auto;
+    /* Pushes the group to the far right */
     display: flex;
     align-items: center;
-    gap: 12px; /* Space between buttons */
+    gap: 12px;
+    /* Space between buttons */
 }
 
 /* Style for the new "Delete All" button */
@@ -231,17 +237,22 @@
     padding: 6px 14px;
     font-size: 14px;
     font-weight: 500;
-    background-color: #FEE4E2; /* Light red background */
-    color: #D92D20;           /* Dark red text */
-    border: 1px solid #FECDCA; /* Red border */
+    background-color: #FEE4E2;
+    /* Light red background */
+    color: #D92D20;
+    /* Dark red text */
+    border: 1px solid #FECDCA;
+    /* Red border */
     border-radius: 8px;
     cursor: pointer;
     transition: background-color 0.2s, color 0.2s;
 }
 
 .delete-all-btn:hover {
-    background-color: #D92D20; /* Darker red background on hover */
-    color: #FFFFFF;           /* White text on hover */
+    background-color: #D92D20;
+    /* Darker red background on hover */
+    color: #FFFFFF;
+    /* White text on hover */
 }
 
 /* --- Add these new styles for the Toast Notification --- */
@@ -251,8 +262,10 @@
 /* --- Corrected styles for the Toast Notification --- */
 
 .toast {
-    visibility: hidden; /* Hidden by default */
-    min-width: 350px;   /* Made it a bit wider for the URL */
+    visibility: hidden;
+    /* Hidden by default */
+    min-width: 350px;
+    /* Made it a bit wider for the URL */
     background-color: #333;
     color: #fff;
     text-align: center;
@@ -261,19 +274,21 @@
     position: fixed;
     z-index: 1001;
     left: 50%;
-    top: 30px; /* Start position off-screen */
+    top: 30px;
+    /* Start position off-screen */
     transform: translateX(-50%);
     font-size: 16px;
     opacity: 0;
     transition: opacity 0.5s, top 0.5s;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 /* Class to show the toast */
 .toast.show {
     visibility: visible;
     opacity: 1;
-    top: 50px; /* Animate to this position */
+    top: 50px;
+    /* Animate to this position */
 }
 
 /* Styles for the "URL Copied" text inside the toast */
@@ -286,12 +301,50 @@
 /* Styles for the input field that shows the URL */
 .toast input {
     width: 100%;
-    box-sizing: border-box; /* Ensures padding doesn't break the layout */
+    box-sizing: border-box;
+    /* Ensures padding doesn't break the layout */
     padding: 8px;
     background-color: #444;
     border: 1px solid #555;
     color: #fff;
     border-radius: 6px;
     text-align: center;
-    font-family: monospace; /* Makes the URL easier to read */
+    border: 1px solid #555;
+    color: #fff;
+    border-radius: 6px;
+    text-align: center;
+    font-family: monospace;
+    /* Makes the URL easier to read */
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .content-wrapper {
+        padding: 16px;
+    }
+
+    .form-header h2 {
+        font-size: 20px;
+    }
+
+    .album-tabs {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .tab-actions {
+        margin-left: 0;
+        width: 100%;
+        margin-top: 12px;
+        justify-content: space-between;
+    }
+
+    .empty-state {
+        padding: 40px 20px;
+    }
+
+    .toast {
+        min-width: 300px;
+        width: 90%;
+    }
 }

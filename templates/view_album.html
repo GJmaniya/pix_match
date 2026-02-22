@@ -60,7 +60,15 @@
 
         <main class="main-content">
             <header class="main-header">
-                <h2>Welcome, {{ user_first_name }}</h2>
+                <div class="header-left">
+                    <button class="sidebar-toggle" id="sidebarToggle">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 12H21M3 6H21M3 18H21" stroke="#344054" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round" />
+                        </svg>
+                    </button>
+                    <h2>Welcome, {{ user_first_name }}</h2>
+                </div>
                 <div class="user-profile">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path
@@ -74,19 +82,13 @@
             </header>
 
             <div class="content-wrapper">
-                <div class="album-header">
+                <div class="form-header">
                     <a href="{{ url_for('add_album', event_id=event_id) }}" class="back-link"><svg width="20"
                             height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12.5 15L7.5 10L12.5 5" stroke="#101828" stroke-width="1.67" stroke-linecap="round"
-                                stroke-linejoin="round" />
+                            <path d="M12.5 15L7.5 10L12.5 5" stroke="#344054" stroke-width="1.66667"
+                                stroke-linecap="round" stroke-linejoin="round" />
                         </svg></a>
                     <h2>{{ event_name }}</h2>
-                    <button class="options-btn"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"
-                            xmlns="http://www.w3.org/2000/svg">
-                            <path
-                                d="M10 10.833a.833.833 0 1 0 0-1.666.833.833 0 0 0 0 1.666zm0-6.667a.833.833 0 1 0 0-1.666.833.833 0 0 0 0 1.666zm0 13.334a.833.833 0 1 0 0-1.667.833.833 0 0 0 0 1.667z"
-                                stroke="#667085" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg></button>
                 </div>
 
                 <section class="album-tabs">
@@ -192,6 +194,26 @@
                 console.error('Failed to copy URL: ', err);
                 alert('Failed to copy URL.');
             });
+        });
+
+        // Mobile Sidebar Toggle
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const sidebar = document.querySelector('.sidebar');
+        const overlay = document.createElement('div');
+        overlay.className = 'sidebar-overlay';
+        document.body.appendChild(overlay);
+
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+                sidebar.classList.toggle('show');
+                overlay.classList.toggle('show');
+            });
+        }
+
+        overlay.addEventListener('click', function () {
+            sidebar.classList.remove('show');
+            overlay.classList.remove('show');
         });
     </script>
 </body>

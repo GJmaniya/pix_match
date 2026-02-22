@@ -91,18 +91,37 @@
     align-items: center;
     text-align: center;
     padding: 20px;
-    position: relative; /* This is required to position the footer */
+    position: relative;
+    /* This is required to position the footer */
 }
 
 /* Add this to the bottom of add_album.css */
 .album-link {
     text-decoration: none;
 }
+
 .album-card h3 {
     font-size: 18px;
     font-weight: 600;
     color: #101828;
     margin: 0;
+}
+
+.album-cover-photo {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.album-cover-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
 .card-footer {
@@ -112,9 +131,11 @@
     right: 0;
     padding: 15px;
     display: flex;
-    justify-content: flex-end; /* Aligns icons to the right */
+    justify-content: flex-end;
+    /* Aligns icons to the right */
     align-items: center;
-    gap: 8px; /* Adds space between icons */
+    gap: 8px;
+    /* Adds space between icons */
 }
 
 .icon-btn {
@@ -122,16 +143,41 @@
     border: none;
     padding: 4px;
     cursor: pointer;
-    line-height: 0; /* Helps align SVGs properly */
+    line-height: 0;
+    /* Helps align SVGs properly */
 }
 
 .icon-btn svg {
     width: 20px;
     height: 20px;
     stroke: #667085;
-    fill: none; /* Important for outline icons like the heart */
+    fill: none;
+    /* Important for outline icons like the heart */
 }
 
 .icon-btn:hover svg {
-    stroke: #101828; /* Darker icon color on hover */
+    stroke: #101828;
+    /* Darker icon color on hover */
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .album-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .album-card {
+        width: 100%;
+        max-width: 320px;
+    }
+
+    .form-header {
+        align-items: center;
+    }
+
+    .form-header h2 {
+        font-size: 18px;
+    }
 }

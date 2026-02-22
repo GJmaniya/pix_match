@@ -107,7 +107,7 @@ body {
 
 .google-btn:hover {
     background-color: #f9f9f9;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .google-btn img {
@@ -123,7 +123,8 @@ body {
     margin: 1.5rem 0;
 }
 
-.divider::before, .divider::after {
+.divider::before,
+.divider::after {
     content: '';
     flex: 1;
     border-bottom: 1px solid #ddd;
@@ -178,7 +179,7 @@ body {
 .submit-btn {
     width: 40%;
     padding: 14px;
-    background-color:   #343a40;
+    background-color: #343a40;
     color: #fff;
     border: none;
     border-radius: 8px;
@@ -200,9 +201,12 @@ body {
     .container {
         flex-direction: column;
     }
-    .info-panel, .form-panel {
+
+    .info-panel,
+    .form-panel {
         width: 100%;
     }
+
     .form-panel {
         padding: 2rem;
     }
@@ -213,10 +217,26 @@ body {
         grid-template-columns: 1fr;
         gap: 1rem;
     }
+
     .form-panel {
         padding: 2rem 1.5rem;
     }
+
     .submit-btn {
         width: 100%;
+    }
+}
+
+@media (max-width: 400px) {
+    .form-panel {
+        padding: 1.5rem 1rem;
+    }
+
+    .info-panel {
+        padding: 2rem 1rem;
+    }
+
+    .form-panel h1 {
+        font-size: 1.5rem;
     }
 }

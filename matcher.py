@@ -57,40 +57,69 @@ class FaceMatcher:
 
     def load_or_compute_directory_embeddings(self, search_dir, cache_path):
         """
-        Loads embeddings from cache if available, otherwise computes and saves them.
+        Loads embeddings from cache if available, updating it for new/deleted files.
         Returns a dictionary mapping filename -> embeddings (numpy array).
         """
+        # Get all image files recursively
+        current_files = set()
+        for root, _, files in os.walk(search_dir):
+            for file in files:
+                if file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                    # Use relative path from search_dir
+                    rel_dir = os.path.relpath(root, search_dir)
+                    if rel_dir == '.':
+                        rel_path = file
+                    else:
+                        rel_path = os.path.join(rel_dir, file)
+                    current_files.add(rel_path)
+        
+        file_embeddings = {}
+        cache_needs_update = False
+        
         if os.path.exists(cache_path):
             logging.info(f"Loading embeddings from cache: {cache_path}")
             try:
-                return torch.load(cache_path, weights_only=False)
+                file_embeddings = torch.load(cache_path, weights_only=False)
             except Exception as e:
-                logging.error(f"Error loading cache: {e}. Recomputing...")
+                logging.error(f"Error loading cache: {e}. Starting fresh...")
+                file_embeddings = {}
+
+        # Identify changes
+        cached_files = set(file_embeddings.keys())
+        new_files = current_files - cached_files
+        deleted_files = cached_files - current_files
         
-        logging.info(f"Computing embeddings for images in {search_dir}...")
-        img_files = [
-            os.path.join(search_dir, f) 
-            for f in os.listdir(search_dir) 
-            if f.lower().endswith(('.jpg', '.jpeg', '.png'))
-        ]
-        
-        file_embeddings = {}
-        
-        # Parallel extraction
-        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            futures = [executor.submit(self.extract_embedding_for_file, img_path) for img_path in img_files]
+        # Remove deleted files from cache
+        if deleted_files:
+            logging.info(f"Removing {len(deleted_files)} deleted files from cache...")
+            for f in deleted_files:
+                del file_embeddings[f]
+            cache_needs_update = True
             
-            for i, future in enumerate(as_completed(futures)):
-                if i % 10 == 0:
-                    logging.info(f"Processed {i}/{len(img_files)} images...")
+        # Compute embeddings for new files
+        if new_files:
+            logging.info(f"Computing embeddings for {len(new_files)} new files...")
+            new_file_paths = [os.path.join(search_dir, f) for f in new_files]
+            
+            # Parallel extraction for new files
+            with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+                futures = [executor.submit(self.extract_embedding_for_file, img_path) for img_path in new_file_paths]
                 
-                path, emb = future.result()
-                if emb is not None:
-                    file_embeddings[os.path.basename(path)] = emb
+                for i, future in enumerate(as_completed(futures)):
+                    if i % 10 == 0:
+                        logging.info(f"Processed {i}/{len(new_files)} new images...")
+                    
+                    path, emb = future.result()
+                    if emb is not None:
+                        file_embeddings[os.path.basename(path)] = emb
+            
+            cache_needs_update = True
         
-        # Save cache
-        logging.info(f"Saving embeddings to cache: {cache_path}")
-        torch.save(file_embeddings, cache_path)
+        # Save cache if updated
+        if cache_needs_update:
+            logging.info(f"Updating cache with {len(file_embeddings)} total entries: {cache_path}")
+            torch.save(file_embeddings, cache_path)
+            
         return file_embeddings
 
     def find_matches(self, user_photo_path, search_dir, output_dir, tolerance=0.50):
@@ -148,9 +177,15 @@ class FaceMatcher:
                 match_count += 1
                 matched_files.append(filename)
                 
-                # Copy matched file to output directory
+                # Copy matched file to output directory, preserving structure if needed
+                # For simplicity, we'll flatten the structure in the output directory 
+                # OR we can keep it. Let's keep it to avoid name collisions.
                 src_path = os.path.join(search_dir, filename)
                 dst_path = os.path.join(output_dir, filename)
+                
+                # Create parent directory if it doesn't exist
+                os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+                
                 try:
                     shutil.copy2(src_path, dst_path)
                 except Exception as e:

@@ -1,6 +1,7 @@
 /* Main content area overrides for this page */
 .main-content {
-    background-color: #F9FAFB; /* Sets the light gray background */
+    background-color: #F9FAFB;
+    /* Sets the light gray background */
 }
 
 .page-header {
@@ -27,8 +28,10 @@
     border-radius: 12px;
     padding: 24px;
     border: 1px solid #EAECF0;
-    max-width: 900px; /* Limit the width of the form */
-    margin: 0 auto; /* Center the form container */
+    max-width: 900px;
+    /* Limit the width of the form */
+    margin: 0 auto;
+    /* Center the form container */
 }
 
 .form-header {
@@ -44,12 +47,14 @@
     font-weight: 600;
     color: #101828;
     margin: 0;
-    flex-grow: 1; /* Pushes the options button to the right */
+    flex-grow: 1;
+    /* Pushes the options button to the right */
 }
 
 .back-link {
     margin-right: 16px;
-    line-height: 0; /* Aligns SVG nicely */
+    line-height: 0;
+    /* Aligns SVG nicely */
 }
 
 .options-btn {
@@ -71,7 +76,8 @@
 .form-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 20px 24px; /* Row and column gap */
+    gap: 20px 24px;
+    /* Row and column gap */
 }
 
 .form-group {
@@ -91,7 +97,8 @@
     border: 1px solid #D0D5DD;
     border-radius: 8px;
     font-size: 16px;
-    background-color: #F9FAFB; /* Light gray input background */
+    background-color: #F9FAFB;
+    /* Light gray input background */
     color: #667085;
 }
 
@@ -115,7 +122,8 @@
     font-weight: 500;
     cursor: pointer;
     transition: all 0.3s ease;
-    text-decoration: none; /* Add this line */
+    text-decoration: none;
+    /* Add this line */
 }
 
 .btn-primary {
@@ -132,4 +140,36 @@
     background-color: #F2F4F7;
     color: #344054;
     border: 1px solid #D0D5DD;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .page-header {
+        justify-content: space-between;
+        /* Button left, Profile right */
+    }
+
+    .form-container {
+        padding: 16px;
+        margin: 0;
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+        width: 100%;
+    }
+
+    .form-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .form-actions {
+        flex-direction: column-reverse;
+        /* Stack buttons, Next on top usually? Or Cancel bottom. Column reverse puts Next on top if Next is last in DOM. */
+    }
+
+    .btn {
+        width: 100%;
+        text-align: center;
+    }
 }

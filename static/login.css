@@ -1,8 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 
 :root {
-    --background-start: #2a5857; /* Darker teal/green from your image gradient */
-    --background-end: #7d8f8d;   /* Lighter grey-green from your image gradient */
+    --background-start: #2a5857;
+    /* Darker teal/green from your image gradient */
+    --background-end: #7d8f8d;
+    /* Lighter grey-green from your image gradient */
     --white: #ffffff;
     --light-gray: #f8f8f8;
     --dark-gray: #333333;
@@ -10,7 +12,8 @@
     --border-color: #e0e0e0;
     --google-blue: #4285F4;
     --google-text: #707070;
-    --button-bg: #4CAF50; /* Example green, adjust as needed for the login button */
+    --button-bg: #4CAF50;
+    /* Example green, adjust as needed for the login button */
     --button-text: #ffffff;
 }
 
@@ -37,17 +40,23 @@ body {
     background-color: var(--white);
     border-radius: 20px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    width: 90%; /* Adjust as needed */
-    max-width: 1000px; /* Max width for larger screens */
+    width: 90%;
+    /* Adjust as needed */
+    max-width: 1000px;
+    /* Max width for larger screens */
     min-height: 600px;
-    overflow: hidden; /* Ensures rounded corners cut off content */
-    opacity: 0; /* Will be animated in by GSAP */
-    transform: translateY(20px); /* Initial position for animation */
+    overflow: hidden;
+    /* Ensures rounded corners cut off content */
+    opacity: 0;
+    /* Will be animated in by GSAP */
+    transform: translateY(20px);
+    /* Initial position for animation */
 }
 
 .left-panel {
     flex: 1;
-    background-color: var(--light-gray); /* Match the lighter gray on the left */
+    background-color: var(--light-gray);
+    /* Match the lighter gray on the left */
     padding: 40px;
     display: flex;
     flex-direction: column;
@@ -61,7 +70,8 @@ body {
     display: flex;
     align-items: center;
     margin-bottom: 20px;
-    position: absolute; /* Position relative to .left-panel */
+    position: absolute;
+    /* Position relative to .left-panel */
     top: 40px;
     left: 40px;
 }
@@ -82,7 +92,8 @@ body {
 .left-panel .illustration {
     margin: 40px 0;
     width: 100%;
-    text-align: center; /* Center the illustration */
+    text-align: center;
+    /* Center the illustration */
 }
 
 .left-panel .illustration img {
@@ -211,7 +222,8 @@ body {
 }
 
 .input-group input:focus {
-    border-color: #6a8cff; /* A subtle blue highlight on focus */
+    border-color: #6a8cff;
+    /* A subtle blue highlight on focus */
     box-shadow: 0 0 0 3px rgba(106, 140, 255, 0.2);
 }
 
@@ -221,7 +233,8 @@ body {
     padding: 12px 20px;
     border: none;
     border-radius: 8px;
-    background-color: var(--dark-gray); /* Changed to dark gray as in the image */
+    background-color: var(--dark-gray);
+    /* Changed to dark gray as in the image */
     color: var(--white);
     font-size: 1em;
     font-weight: 600;
@@ -231,7 +244,8 @@ body {
 }
 
 .login-button:hover {
-    background-color: #555555; /* Slightly lighter dark gray on hover */
+    background-color: #555555;
+    /* Slightly lighter dark gray on hover */
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
@@ -240,7 +254,8 @@ body {
     .login-container {
         flex-direction: column;
         width: 95%;
-        max-width: 450px; /* Stack panels on smaller screens */
+        max-width: 450px;
+        /* Stack panels on smaller screens */
         min-height: auto;
     }
 
@@ -249,8 +264,10 @@ body {
         text-align: center;
         align-items: center;
     }
+
     .left-panel .logo {
-        position: static; /* Reset positioning */
+        position: static;
+        /* Reset positioning */
         margin-bottom: 20px;
     }
 
@@ -275,6 +292,23 @@ body {
     .separator,
     .input-group,
     .login-button {
-        max-width: 100%; /* Allow full width on small screens */
+        max-width: 100%;
+        /* Allow full width on small screens */
+    }
+}
+
+@media (max-width: 480px) {
+    .login-container {
+        width: 100%;
+        border-radius: 0;
+    }
+
+    .left-panel,
+    .right-panel {
+        padding: 20px;
+    }
+
+    body {
+        padding: 0;
     }
 }

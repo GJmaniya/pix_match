@@ -4,11 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PixMatch - Add Album</title>
+    <title>{{ event.event_name }} - PixMatch</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='share_page.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='auth_modal.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 
 <body>
@@ -16,20 +17,25 @@
     <div class="app-container">
         <aside class="sidebar">
             <div class="sidebar-header">
-                <aside class="sidebar">
-                    <div class="sidebar-header">
-                        <a href="{{ url_for('home') }}" style="text-decoration: none; cursor: pointer;">
-                            <img src="{{ url_for('static', filename='images/pixmatch-logo.png') }}" alt="PixMatch Logo"
-                                class="sidebar-logo">
-                        </a>
-                    </div>
-                    <ul class="sidebar-nav">
+                <a href="{{ url_for('home') }}" style="text-decoration: none; cursor: pointer;">
+                    <img src="{{ url_for('static', filename='images/pixmatch-logo.png') }}" alt="PixMatch Logo"
+                        class="sidebar-logo">
+                </a>
             </div>
+            <ul class="sidebar-nav">
+                <!-- Add navigation items here if needed, or leave empty if populated dynamically -->
+            </ul>
         </aside>
 
         <main class="main-content">
             <header class="main-header">
                 <div class="header-left">
+                    <button class="sidebar-toggle" id="sidebarToggle" style="margin-right: 8px;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 12H21M3 6H21M3 18H21" stroke="#374151" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round" />
+                        </svg>
+                    </button>
                     <button class="icon-button" aria-label="Go back">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"
                             stroke-width="2" stroke="currentColor">
@@ -83,11 +89,140 @@
                 </div>
             </div>
 
+
+            <!-- OTP Verification Modal - Split Screen Design -->
+            {% if not otp_verified %}
+            <div class="auth-overlay" id="otpOverlay">
+                <!-- Background with event cover -->
+                <div class="auth-background"
+                    style="background-image: url('{{ url_for('static', filename='uploads/' + (event.cover_photo if event.cover_photo else 'default-cover.jpg')) }}');">
+                </div>
+
+                <div class="auth-container">
+                    <!-- Left Side - Event Details with Cover Photo Background -->
+                    <div class="auth-left"
+                        style="background-image: url('{{ url_for('static', filename='uploads/' + (event.cover_photo if event.cover_photo else 'default-cover.jpg')) }}');">
+                        <div class="event-card">
+                            <div class="event-logo">
+                                <img src="{{ url_for('static', filename='uploads/' + (event.cover_photo if event.cover_photo else 'default-cover.jpg')) }}"
+                                    alt="Event">
+                            </div>
+                            <div class="event-info">
+                                <h1 class="event-date">{{ event.event_date if event.event_date else 'Event Date' }}</h1>
+                                <h2 class="event-title">{{ event.event_name }}</h2>
+                                <p class="event-subtitle">Photo Gallery</p>
+                            </div>
+                            <div class="event-badge">Public Group</div>
+                        </div>
+                    </div>
+
+                    <!-- Right Side - Authentication Forms -->
+                    <div class="auth-right">
+                        <!-- Step 1: Contact Input -->
+                        <div id="contactStep" class="auth-step">
+                            <h2>Verification</h2>
+                            <p class="auth-subtitle">Enter the OTP sent to your Phone Number</p>
+
+                            <div class="otp-boxes">
+                                <input type="text" maxlength="1" class="otp-box" data-index="0">
+                                <input type="text" maxlength="1" class="otp-box" data-index="1">
+                                <input type="text" maxlength="1" class="otp-box" data-index="2">
+                                <input type="text" maxlength="1" class="otp-box" data-index="3">
+                            </div>
+
+                            <button class="auth-btn" id="sendOtpBtn">
+                                <span class="btn-text">Continue</span>
+                                <span class="btn-loader" style="display: none;">⏳</span>
+                            </button>
+
+                            <div class="auth-links">
+                                <a href="#" id="resendOtpLink">Resend OTP</a>
+                                <span>or</span>
+                                <a href="#" id="changeNumberLink">Call</a>
+                                <span>or</span>
+                                <a href="#" id="callLink">OTP on Call</a>
+                            </div>
+
+                            <p class="auth-error" id="contactError" style="display: none;"></p>
+
+                            <!-- Hidden input for phone/email -->
+                            <input type="hidden" id="contactInput">
+                        </div>
+
+                        <!-- Step 2: OTP Verification (Initially shown as Step 1) -->
+                        <div id="otpStep" class="auth-step" style="display: none;">
+                            <h2>Verification</h2>
+                            <p class="auth-subtitle">Enter the OTP sent to <strong id="contactDisplay"></strong></p>
+
+                            <div class="otp-boxes">
+                                <input type="text" maxlength="1" class="otp-box" data-index="0" inputmode="numeric">
+                                <input type="text" maxlength="1" class="otp-box" data-index="1" inputmode="numeric">
+                                <input type="text" maxlength="1" class="otp-box" data-index="2" inputmode="numeric">
+                                <input type="text" maxlength="1" class="otp-box" data-index="3" inputmode="numeric">
+                                <input type="text" maxlength="1" class="otp-box" data-index="4" inputmode="numeric">
+                                <input type="text" maxlength="1" class="otp-box" data-index="5" inputmode="numeric">
+                            </div>
+
+                            <button class="auth-btn" id="verifyOtpBtn">
+                                <span class="btn-text">Continue</span>
+                                <span class="btn-loader" style="display: none;">⏳</span>
+                            </button>
+
+                            <div class="auth-links">
+                                <a href="#" id="resendOtpBtn">Resend OTP</a>
+                                <span>or</span>
+                                <a href="#" id="callOtpBtn">OTP on Call</a>
+                            </div>
+
+                            <p class="auth-error" id="otpError" style="display: none;"></p>
+                            <p class="auth-success" id="otpSuccess" style="display: none;"></p>
+                        </div>
+
+                        <!-- Step 3: User Information -->
+                        <div id="userInfoStep" class="auth-step" style="display: none;">
+                            <h2>Create your Account</h2>
+                            <p class="auth-subtitle">Enter your details to get started</p>
+
+                            <div class="auth-form">
+                                <input type="text" id="firstNameInput" placeholder="Enter First Name"
+                                    autocomplete="given-name">
+                                <input type="text" id="lastNameInput" placeholder="Enter Last Name"
+                                    autocomplete="family-name">
+                                <input type="tel" id="phoneInput" placeholder="+91 • 9328053324" autocomplete="tel">
+                                <input type="email" id="emailInput" placeholder="Enter Email (optional)"
+                                    autocomplete="email">
+                            </div>
+
+                            <button class="auth-btn" id="submitUserInfoBtn">
+                                <span class="btn-text">Continue</span>
+                                <span class="btn-loader" style="display: none;">⏳</span>
+                            </button>
+
+                            <p class="auth-footer">
+                                By creating an account you agree with our <a href="#">Terms of Service</a>, <a
+                                    href="#">Privacy Policy</a>
+                            </p>
+
+                            <p class="auth-error" id="userInfoError" style="display: none;"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+
             <!-- Matched Photos Display Area -->
             <div id="matchedPhotosContainer" style="display: none;">
-                <div class="matched-photos-header">
-                    <h2 id="matchedPhotosTitle"></h2>
-                    <p id="matchedPhotosSubtitle"></p>
+                <div class="matched-photos-header"
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <div>
+                        <h2 id="matchedPhotosTitle"></h2>
+                        <p id="matchedPhotosSubtitle"></p>
+                    </div>
+                    <button id="showAllPhotosBtn" class="auth-btn"
+                        style="width: auto; padding: 8px 16px; font-size: 14px;">
+                        Show All Photos
+                    </button>
                 </div>
                 <div id="matchedPhotosGrid" class="photo-grid"></div>
             </div>
@@ -117,24 +252,127 @@
                 <p class="prompt-description">For best results, please click a photo clearly showing your facial
                     features.</p>
 
-                <!-- Upload Button -->
-                <div class="upload-section">
-                    <input type="file" id="photoInput" accept="image/*" style="display: none;">
-                    <button class="upload-button" id="uploadButton">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                        Upload Your Photo
-                    </button>
-                    <div id="uploadStatus" class="upload-status"></div>
+                <div class="header">
+                    <div class="logo">
+                        <img src="{{ url_for('static', filename='images/pixmatch-logo.png') }}" alt="PixMatch Logo">
+                    </div>
+                    <div class="header-actions">
+                        <!-- User Profile Button -->
+                        <button class="user-btn" id="userBtn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                        </button>
+
+                        <!-- User Dropdown Menu -->
+                        <div class="user-dropdown" id="userDropdown" style="display: none;">
+                            <div class="user-dropdown-header">
+                                <div class="user-avatar">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="12" cy="7" r="4"></circle>
+                                    </svg>
+                                </div>
+                                <div class="user-info">
+                                    <div class="user-name" id="userName">Guest User</div>
+                                    <div class="user-email" id="userEmail">guest@example.com</div>
+                                </div>
+                            </div>
+                            <div class="user-dropdown-divider"></div>
+                            <a href="/logout" class="user-dropdown-item logout-btn">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                    <polyline points="16 17 21 12 16 7"></polyline>
+                                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                                </svg>
+                                Logout
+                            </a>
+                        </div>
+
+                        <!-- Loading Overlay -->
+                        <div id="processingOverlay" class="auth-overlay"
+                            style="display: none; z-index: 2000; background: rgba(255, 255, 255, 0.9);">
+                            <div class="auth-container"
+                                style="background: transparent; box-shadow: none; flex-direction: column; align-items: center; justify-content: center;">
+                                <div class="loader-spinner"
+                                    style="width: 60px; height: 60px; border: 6px solid #f3f3f3; border-top: 6px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;">
+                                </div>
+                                <h2 style="margin-top: 20px; color: #333;">Finding your photos...</h2>
+                                <p style="color: #666;">This may take a few seconds</p>
+                            </div>
+                        </div>
+
+                        <button class="upload-btn" id="uploadBtn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                                <div id="uploadStatus" class="upload-status"></div>
+                    </div>
                 </div>
-            </div>
-            {% endif %}
+                {% endif %}
         </main>
     </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script>
+        // User dropdown toggle
+        const userBtn = document.getElementById('userBtn');
+        const userDropdown = document.getElementById('userDropdown');
+
+        if (userBtn && userDropdown) {
+            userBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const isVisible = userDropdown.style.display === 'block';
+                userDropdown.style.display = isVisible ? 'none' : 'block';
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function (e) {
+                if (!userDropdown.contains(e.target) && e.target !== userBtn) {
+                    userDropdown.style.display = 'none';
+                }
+            });
+
+            // Populate user info from session
+            {% if session.get('guest_name_' ~event_id) %}
+            document.getElementById('userName').textContent = "{{ session.get('guest_name_' ~ event_id) }}";
+            {% endif %}
+
+            {% if session.get('guest_email_' ~event_id) %}
+            document.getElementById('userEmail').textContent = "{{ session.get('guest_email_' ~ event_id) }}";
+            {% elif session.get('otp_contact_' ~event_id) %}
+            document.getElementById('userEmail').textContent = "{{ session.get('otp_contact_' ~ event_id) }}";
+            {% endif %}
+        }
+
+        const eventId = {{ event_id }};
+
+        // Mobile Sidebar Toggle
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const sidebar = document.querySelector('.sidebar');
+        const overlay = document.createElement('div');
+        overlay.className = 'sidebar-overlay';
+        document.body.appendChild(overlay);
+
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+                sidebar.classList.toggle('show');
+                overlay.classList.toggle('show');
+            });
+        }
+
+        overlay.addEventListener('click', function () {
+            sidebar.classList.remove('show');
+            overlay.classList.remove('show');
+        });
+    </script>
 
     <script>
         // Function to display matched photos
@@ -144,12 +382,35 @@
             const subtitle = document.getElementById('matchedPhotosSubtitle');
             const grid = document.getElementById('matchedPhotosGrid');
 
-            // Update title and subtitle
+            // Update title
             title.textContent = `Found ${count} Matching Photos!`;
-            subtitle.textContent = `Processed in ${timeTaken.toFixed(1)}s`;
+            title.style.display = 'none'; // Hide the title as per user request
+            // Hide processing time subtitle
+            subtitle.style.display = 'none';
+            // Hide the subtitle
 
-            // Show the header
-            document.querySelector('.matched-photos-header').style.display = 'block';
+            // Hide the header entirely as per user request
+            document.querySelector('.matched-photos-header').style.display = 'none';
+
+            // Ensure container is visible
+            container.style.display = 'block';
+
+            // Hide the main photo grid if it exists
+            const mainGrid = document.querySelector('.photo-grid:not(#matchedPhotosGrid)');
+            if (mainGrid) {
+                mainGrid.style.display = 'none';
+            }
+
+            // Setup Show All Photos button
+            const showAllBtn = document.getElementById('showAllPhotosBtn');
+            if (showAllBtn) {
+                showAllBtn.onclick = function () {
+                    container.style.display = 'none';
+                    if (mainGrid) {
+                        mainGrid.style.display = 'grid';
+                    }
+                };
+            }
 
             // Clear previous results
             grid.innerHTML = '';
@@ -196,8 +457,15 @@
                     headerUploadButton.disabled = true;
                     headerUploadButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg><span>Processing...</span>';
 
+                    // Show full screen processing overlay
+                    const overlay = document.getElementById('processingOverlay');
+                    if (overlay) {
+                        overlay.style.display = 'flex';
+                    }
+
                     const formData = new FormData();
                     formData.append('photo', file);
+                    formData.append('event_id', '{{ event_id }}');
 
                     fetch('/api/match_photos', {
                         method: 'POST',
@@ -247,6 +515,7 @@
                     // Create form data
                     const formData = new FormData();
                     formData.append('photo', file);
+                    formData.append('event_id', '{{ event_id }}');
 
                     // Call API
                     fetch('/api/match_photos', {
@@ -279,8 +548,279 @@
                 });
             }
         });
-    </script>
 
+        // OTP Authentication Logic
+        const otpOverlay = document.getElementById('otpOverlay');
+        if (otpOverlay) {
+            let currentContact = '';
+
+            const contactStep = document.getElementById('contactStep');
+            const otpStep = document.getElementById('otpStep');
+            const contactInput = document.getElementById('contactInput');
+            const otpInput = document.getElementById('otpInput');
+            const sendOtpBtn = document.getElementById('sendOtpBtn');
+            const verifyOtpBtn = document.getElementById('verifyOtpBtn');
+            const resendOtpBtn = document.getElementById('resendOtpBtn');
+            const changeContactBtn = document.getElementById('changeContactBtn');
+            const contactError = document.getElementById('contactError');
+            const otpError = document.getElementById('otpError');
+            const otpSuccess = document.getElementById('otpSuccess');
+            const contactDisplay = document.getElementById('contactDisplay');
+
+            // Send OTP
+            sendOtpBtn.addEventListener('click', async function () {
+                const contact = contactInput.value.trim();
+
+                if (!contact) {
+                    showError(contactError, '⚠️ Please enter your email or phone number');
+                    return;
+                }
+
+                // Basic validation
+                if (!contact.includes('@') && !contact.match(/^\+?\d{10,}$/)) {
+                    showError(contactError, '⚠️ Please enter a valid email or phone number');
+                    return;
+                }
+
+                setLoading(sendOtpBtn, true);
+                contactError.style.display = 'none';
+
+                try {
+                    const response = await fetch('/request_otp/{{ event_id }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ contact: contact })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        currentContact = contact;
+                        contactDisplay.textContent = contact;
+                        contactStep.style.display = 'none';
+                        otpStep.style.display = 'block';
+                        otpInput.focus();
+
+                        // Show dev mode OTP if present
+                        if (data.message && data.message.includes('OTP')) {
+                            showSuccess(otpSuccess, data.message);
+                        }
+                    } else {
+                        showError(contactError, '❌ ' + (data.error || 'Failed to send OTP'));
+                    }
+                } catch (error) {
+                    showError(contactError, '❌ Connection error. Please try again.');
+                } finally {
+                    setLoading(sendOtpBtn, false);
+                }
+            });
+
+            // Verify OTP
+            verifyOtpBtn.addEventListener('click', async function () {
+                const otp = otpInput.value.trim();
+
+                if (!otp || otp.length !== 6) {
+                    showError(otpError, '⚠️ Please enter a 6-digit code');
+                    return;
+                }
+
+                setLoading(verifyOtpBtn, true);
+                otpError.style.display = 'none';
+                otpSuccess.style.display = 'none';
+
+                try {
+                    const response = await fetch('/verify_otp/{{ event_id }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            contact: currentContact,
+                            otp_code: otp
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showSuccess(otpSuccess, '✓ Verified!');
+                        setTimeout(() => {
+                            // Move to user info step
+                            otpStep.style.display = 'none';
+                            userInfoStep.style.display = 'block';
+
+                            // Pre-fill email if contact was email
+                            if (currentContact.includes('@')) {
+                                emailInput.value = currentContact;
+                            }
+
+                            firstNameInput.focus();
+                        }, 800);
+                    } else {
+                        showError(otpError, '❌ ' + (data.error || 'Invalid code'));
+                        otpInput.value = '';
+                        otpInput.focus();
+                    }
+                } catch (error) {
+                    showError(otpError, '❌ Connection error. Please try again.');
+                } finally {
+                    setLoading(verifyOtpBtn, false);
+                }
+            });
+
+            // Resend OTP
+            resendOtpBtn.addEventListener('click', async function () {
+                setLoading(resendOtpBtn, true);
+                otpError.style.display = 'none';
+                otpSuccess.style.display = 'none';
+
+                try {
+                    const response = await fetch('/request_otp/{{ event_id }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ contact: currentContact })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showSuccess(otpSuccess, '✓ New code sent!');
+                        otpInput.value = '';
+                        otpInput.focus();
+
+                        // Show dev mode OTP if present
+                        if (data.message && data.message.includes('OTP')) {
+                            showSuccess(otpSuccess, data.message);
+                        }
+                    } else {
+                        showError(otpError, '❌ ' + (data.error || 'Failed to resend'));
+                    }
+                } catch (error) {
+                    showError(otpError, '❌ Connection error. Please try again.');
+                } finally {
+                    setLoading(resendOtpBtn, false);
+                }
+            });
+
+            // Submit User Information
+            const userInfoStep = document.getElementById('userInfoStep');
+            const firstNameInput = document.getElementById('firstNameInput');
+            const lastNameInput = document.getElementById('lastNameInput');
+            const emailInput = document.getElementById('emailInput');
+            const submitUserInfoBtn = document.getElementById('submitUserInfoBtn');
+            const userInfoError = document.getElementById('userInfoError');
+
+            submitUserInfoBtn.addEventListener('click', async function () {
+                const firstName = firstNameInput.value.trim();
+                const lastName = lastNameInput.value.trim();
+                const email = emailInput.value.trim();
+
+                // Validation
+                if (!firstName) {
+                    showError(userInfoError, '⚠️ Please enter your first name');
+                    return;
+                }
+
+                if (!lastName) {
+                    showError(userInfoError, '⚠️ Please enter your last name');
+                    return;
+                }
+
+                if (!email || !email.includes('@')) {
+                    showError(userInfoError, '⚠️ Please enter a valid email address');
+                    return;
+                }
+
+                setLoading(submitUserInfoBtn, true);
+                userInfoError.style.display = 'none';
+
+                try {
+                    const response = await fetch('/save_guest_info/{{ event_id }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            first_name: firstName,
+                            last_name: lastName,
+                            email: email,
+                            contact: currentContact
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        submitUserInfoBtn.querySelector('.btn-text').textContent = '✓ Success! Redirecting...';
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1000);
+                    } else {
+                        showError(userInfoError, '❌ ' + (data.error || 'Failed to save information'));
+                    }
+                } catch (error) {
+                    showError(userInfoError, '❌ Connection error. Please try again.');
+                } finally {
+                    setLoading(submitUserInfoBtn, false);
+                }
+            });
+
+            // Change contact
+            changeContactBtn.addEventListener('click', function () {
+                otpStep.style.display = 'none';
+                contactStep.style.display = 'block';
+                contactInput.value = '';
+                otpInput.value = '';
+                contactError.style.display = 'none';
+                otpError.style.display = 'none';
+                otpSuccess.style.display = 'none';
+                contactInput.focus();
+            });
+
+            // Auto-submit on Enter key
+            contactInput.addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    sendOtpBtn.click();
+                }
+            });
+
+            otpInput.addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    verifyOtpBtn.click();
+                }
+            });
+
+            // Helper functions
+            function setLoading(button, loading) {
+                const btnText = button.querySelector('.btn-text');
+                const btnLoader = button.querySelector('.btn-loader');
+
+                if (loading) {
+                    btnText.style.display = 'none';
+                    btnLoader.style.display = 'inline';
+                    button.disabled = true;
+                } else {
+                    btnText.style.display = 'inline';
+                    btnLoader.style.display = 'none';
+                    button.disabled = false;
+                }
+            }
+
+            function showError(element, message) {
+                element.textContent = message;
+                element.style.display = 'block';
+            }
+
+            function showSuccess(element, message) {
+                element.textContent = message;
+                element.style.display = 'block';
+            }
+        }
+    </script>
 </body>
 
 </html>

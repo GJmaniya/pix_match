@@ -60,6 +60,12 @@
 
         <main class="main-content">
             <header class="page-header">
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3 12H21M3 6H21M3 18H21" stroke="#344054" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                </button>
                 <div class="user-profile-icon">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path
@@ -81,19 +87,6 @@
                         </svg>
                     </a>
                     <h2>Create new event</h2>
-                    <button class="options-btn">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path
-                                d="M10.0003 10.8333C10.4606 10.8333 10.8337 10.4602 10.8337 9.99996C10.8337 9.53972 10.4606 9.16663 10.0003 9.16663C9.54009 9.16663 9.16699 9.53972 9.16699 9.99996C9.16699 10.4602 9.54009 10.8333 10.0003 10.8333Z"
-                                stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                            <path
-                                d="M10.0003 4.16663C10.4606 4.16663 10.8337 3.79354 10.8337 3.33329C10.8337 2.87305 10.4606 2.5 10.0003 2.5C9.54009 2.5 9.16699 2.87305 9.16699 3.33329C9.16699 3.79354 9.54009 4.16663 10.0003 4.16663Z"
-                                stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                            <path
-                                d="M10.0003 17.5C10.4606 17.5 10.8337 17.1269 10.8337 16.6666C10.8337 16.2064 10.4606 15.8333 10.0003 15.8333C9.54009 15.8333 9.16699 16.2064 9.16699 16.6666C9.16699 17.1269 9.54009 17.5 10.0003 17.5Z"
-                                stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>
-                    </button>
                 </div>
 
                 <form action="#" method="POST" class="event-form" enctype="multipart/form-data">
@@ -135,6 +128,27 @@
             </div>
         </main>
     </div>
+    <script>
+        // Mobile Sidebar Toggle
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const sidebar = document.querySelector('.sidebar');
+        const overlay = document.createElement('div');
+        overlay.className = 'sidebar-overlay';
+        document.body.appendChild(overlay);
+
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+                sidebar.classList.toggle('show');
+                overlay.classList.toggle('show');
+            });
+        }
+
+        overlay.addEventListener('click', function () {
+            sidebar.classList.remove('show');
+            overlay.classList.remove('show');
+        });
+    </script>
 </body>
 
 </html>

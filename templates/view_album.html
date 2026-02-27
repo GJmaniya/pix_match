@@ -10,6 +10,81 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        .qr-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 3000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .qr-modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 90%;
+            width: 320px;
+        }
+
+        .qr-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .qr-modal-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: #101828;
+        }
+
+        .qr-container {
+            display: flex;
+            justify-content: center;
+            background: #fff;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #EAECF0;
+            margin-bottom: 20px;
+        }
+
+        .qr-action-btn {
+            width: 100%;
+            padding: 10px;
+            background: #4F46E5;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .qr-action-btn:hover {
+            background: #4338CA;
+        }
+
+        .copy-qr-btn {
+            background: #F2F4F7;
+            color: #344054;
+            border: 1px solid #D0D5DD;
+            margin-top: 8px;
+        }
+
+        .copy-qr-btn:hover {
+            background: #E4E7EC;
+        }
+    </style>
 </head>
 
 <body>
@@ -134,10 +209,16 @@
                                         Public Link</div>
                                     <div style="font-size: 12px; color: #667085; margin-bottom: 8px;">Guests can view
                                         all event photos.</div>
-                                    <button
-                                        onclick="copyToClipboard('{{ request.host_url }}share/event/{{ event_id }}')"
-                                        style="width: 100%; padding: 6px; background: #F2F4F7; border: 1px solid #D0D5DD; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">Copy
-                                        Public Link</button>
+                                    <div style="display: flex; gap: 8px;">
+                                        <button
+                                            onclick="copyToClipboard('{{ request.host_url }}share/event/{{ event_id }}')"
+                                            style="flex: 1; padding: 6px; background: #F2F4F7; border: 1px solid #D0D5DD; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">Copy
+                                            Link</button>
+                                        <button
+                                            onclick="showQRCode('{{ request.host_url }}share/event/{{ event_id }}', 'Public Link QR')"
+                                            style="flex: 1; padding: 6px; background: #EEF2FF; color: #4F46E5; border: 1px solid #C7D2FE; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">QR
+                                            Code</button>
+                                    </div>
                                 </div>
                                 <div style="padding: 12px 16px;">
                                     <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px; color: #101828;">
@@ -152,10 +233,16 @@
                                             style="font-family: monospace; font-size: 15px; font-weight: 700; color: #101828; letter-spacing: 1.5px;">
                                             {{ pin_code }}</div>
                                     </div>
-                                    <button
-                                        onclick="copyToClipboard('{{ request.host_url }}share/event/{{ event_id }}?mode=private')"
-                                        style="width: 100%; padding: 6px; background: #F2F4F7; border: 1px solid #D0D5DD; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">Copy
-                                        Private Link</button>
+                                    <div style="display: flex; gap: 8px;">
+                                        <button
+                                            onclick="copyToClipboard('{{ request.host_url }}share/event/{{ event_id }}?mode=private')"
+                                            style="flex: 1; padding: 6px; background: #F2F4F7; border: 1px solid #D0D5DD; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">Copy
+                                            Link</button>
+                                        <button
+                                            onclick="showQRCode('{{ request.host_url }}share/event/{{ event_id }}?mode=private', 'Private Link QR')"
+                                            style="flex: 1; padding: 6px; background: #EEF2FF; color: #4F46E5; border: 1px solid #C7D2FE; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">QR
+                                            Code</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -205,6 +292,26 @@
                                 <button type="submit" class="btn btn-primary">Create Folder</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+
+                <!-- QR Code Modal -->
+                <div id="qrCodeModal" class="qr-modal-overlay">
+                    <div class="qr-modal-content">
+                        <div class="qr-modal-header">
+                            <h3 id="qrModalTitle">QR Code</h3>
+                            <button type="button" class="close-favorites"
+                                onclick="document.getElementById('qrCodeModal').style.display='none'"
+                                style="background: none; border: none; cursor: pointer;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="qr-container" id="qrcode"></div>
+                        <button class="qr-action-btn copy-qr-btn" onclick="copyQRImage()">Copy QR Image</button>
+                        <button class="qr-action-btn copy-qr-btn" onclick="downloadQRCode()">Download QR Code</button>
                     </div>
                 </div>
 
@@ -358,6 +465,72 @@
         }
 
         // Close dropdown when clicking outside
+        document.addEventListener('click', function (event) {
+            const dropdown = document.getElementById('urlDropdown');
+            const btn = document.getElementById('getUrlBtn');
+            if (dropdown && btn && !dropdown.contains(event.target) && !btn.contains(event.target)) {
+                dropdown.style.display = 'none';
+            }
+        });
+
+        // QR Code Logic
+        let currentQRCode = null;
+
+        function showQRCode(url, title) {
+            // Close dropdown
+            document.getElementById('urlDropdown').style.display = 'none';
+
+            // Set Title
+            document.getElementById('qrModalTitle').textContent = title;
+
+            // Clear existing QR code
+            const qrContainer = document.getElementById('qrcode');
+            qrContainer.innerHTML = '';
+
+            // Generate new QR code
+            currentQRCode = new QRCode(qrContainer, {
+                text: url,
+                width: 200,
+                height: 200,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+
+            // Show Modal
+            document.getElementById('qrCodeModal').style.display = 'flex';
+        }
+
+        function downloadQRCode() {
+            const canvas = document.querySelector('#qrcode canvas');
+            if (canvas) {
+                const url = canvas.toDataURL("image/png");
+                const a = document.createElement('a');
+                a.download = 'pixmatch-qr-code.png';
+                a.href = url;
+                a.click();
+            }
+        }
+
+        async function copyQRImage() {
+            const canvas = document.querySelector('#qrcode canvas');
+            if (canvas) {
+                canvas.toBlob(async blob => {
+                    try {
+                        const item = new ClipboardItem({ "image/png": blob });
+                        await navigator.clipboard.write([item]);
+                        const toast = document.getElementById('copyToast');
+                        const toastUrlInput = document.getElementById('toastUrl');
+                        if (toastUrlInput) toastUrlInput.value = 'QR Code Copied to Clipboard!';
+                        toast.classList.add('show');
+                        setTimeout(() => { toast.classList.remove('show'); }, 3000);
+                    } catch (err) {
+                        console.error("Failed to copy QR code: ", err);
+                        alert("Failed to copy image. Your browser might not support this feature.");
+                    }
+                });
+            }
+        }
         document.addEventListener('click', function (event) {
             const dropdown = document.getElementById('urlDropdown');
             const btn = document.getElementById('getUrlBtn');

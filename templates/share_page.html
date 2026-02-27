@@ -53,11 +53,14 @@
                         </svg>
                     </div>
 
-                    <!-- Hidden file input for upload -->
+                    <!-- Hidden file inputs for upload and camera -->
                     <input type="file" id="headerPhotoInput" accept="image/*" style="display: none;">
+                    <input type="file" id="headerCameraInput" accept="image/*" capture="environment"
+                        style="display: none;">
 
                     <!-- Upload Button -->
-                    <button class="upload-button-header" id="headerUploadButton" aria-label="Upload photo">
+                    <button class="upload-button-header" id="headerUploadButton" aria-label="Upload photo"
+                        title="Upload Photo">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -67,13 +70,41 @@
                         <span>Upload</span>
                     </button>
 
-                    <button class="icon-button" aria-label="More options">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"
-                            stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+                    <!-- Camera Button -->
+                    <button class="upload-button-header camera-button-header" id="headerCameraButton"
+                        aria-label="Take photo" title="Take Selfie">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z">
+                            </path>
+                            <circle cx="12" cy="13" r="4"></circle>
                         </svg>
+                        <span>Camera</span>
                     </button>
+
+                    <div style="position: relative; display: inline-block;">
+                        <button class="icon-button" aria-label="More options"
+                            onclick="document.getElementById('moreDropdown').style.display = document.getElementById('moreDropdown').style.display === 'block' ? 'none' : 'block'">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none"
+                                viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+                            </svg>
+                        </button>
+                        <div id="moreDropdown"
+                            style="display: none; position: absolute; right: 0; top: 100%; margin-top: 8px; background: white; border: 1px solid #EAECF0; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 220px; z-index: 100; overflow: hidden; text-align: left;">
+                            <button onclick="downloadAllPhotos()" id="downloadAllBtn"
+                                style="width: 100%; padding: 12px 16px; background: white; border: none; text-align: left; cursor: pointer; font-size: 14px; color: #374151; display: flex; align-items: center; gap: 8px; transition: background 0.2s;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                                Download All Photos
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </header>
 
@@ -90,15 +121,60 @@
             </div>
 
 
+            <!-- Webcam Overlay -->
+            <div id="webcamOverlay" class="auth-overlay" style="display: none; z-index: 3000;">
+                <div class="auth-container" style="flex-direction: column; max-width: 500px; padding: 24px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 16px;">
+                        <h3 style="margin: 0; font-size: 20px;">Take a Photo</h3>
+                        <button id="closeWebcamBtn" class="close-favorites">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div
+                        style="width: 100%; border-radius: 12px; overflow: hidden; background: #000; position: relative; aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center;">
+                        <video id="webcamVideo" autoplay playsinline
+                            style="width: 100%; height: 100%; object-fit: cover;"></video>
+                        <canvas id="webcamCanvas" style="display: none;"></canvas>
+                        <div id="webcamLoading" style="position: absolute; color: white;">Accessing Camera...</div>
+                    </div>
+
+                    <div style="display: flex; gap: 16px; margin-top: 24px; width: 100%; justify-content: center;">
+                        <button id="captureWebcamBtn" class="upload-button-header"
+                            style="padding: 12px 32px; font-size: 16px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path
+                                    d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z">
+                                </path>
+                                <circle cx="12" cy="13" r="4"></circle>
+                            </svg>
+                            <span>Capture</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- OTP Verification Modal - Split Screen Design -->
             {% if not otp_verified %}
-            <div class="auth-overlay" id="otpOverlay">
+            <div class="auth-overlay" id="otpOverlay" {% if mode=='private' %}style="background: #f3f4f6;" {% endif %}>
+
+                {% if mode != 'private' %}
                 <!-- Background with event cover -->
                 <div class="auth-background"
                     style="background-image: url('{{ url_for('static', filename='uploads/' + (event.cover_photo if event.cover_photo else 'default-cover.jpg')) }}');">
                 </div>
+                {% endif %}
 
-                <div class="auth-container">
+                <div class="auth-container" {% if mode=='private'
+                    %}style="max-width: 480px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);" {% endif %}>
+
+                    {% if mode != 'private' %}
                     <!-- Left Side - Event Details with Cover Photo Background -->
                     <div class="auth-left"
                         style="background-image: url('{{ url_for('static', filename='uploads/' + (event.cover_photo if event.cover_photo else 'default-cover.jpg')) }}');">
@@ -115,9 +191,15 @@
                             <div class="event-badge">Public Group</div>
                         </div>
                     </div>
+                    {% endif %}
 
                     <!-- Right Side - Authentication Forms -->
-                    <div class="auth-right">
+                    <div class="auth-right" {% if mode=='private' %}style="width: 100%; padding: 40px;" {% endif %}>
+
+                        {% if mode == 'private' %}
+                        <h1 style="text-align: center; margin-bottom: 24px; color: #111827; font-size: 24px;">{{
+                            event.event_name }}</h1>
+                        {% endif %}
                         <!-- Step 1: Contact Input -->
                         <div id="contactStep" class="auth-step">
                             <h2>Verification</h2>
@@ -200,11 +282,43 @@
 
                             <p class="auth-footer">
                                 By creating an account you agree with our <a href="#">Terms of Service</a>, <a
-                                    href="#">Privacy Policy</a>
+                                    href="#">Privacy
+                                    Policy</a>
                             </p>
 
                             <p class="auth-error" id="userInfoError" style="display: none;"></p>
                         </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- If mode is private and not verified, show a simplified auth view without the cover -->
+            {% if not otp_verified and mode == 'private' %}
+            <div style="display: flex; align-items: center; justify-content: center; min-height: 80vh;">
+                <div class="auth-container"
+                    style="max-width: 480px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-radius: 16px;">
+                    <div class="auth-right" style="width: 100%; padding: 40px;">
+                        <h1 style="text-align: center; margin-bottom: 24px; color: #111827; font-size: 24px;">{{
+                            event.event_name }}</h1>
+                        <!-- Step 1: Contact Input -->
+                        <div id="contactStep" class="auth-step">
+                            <h2 style="font-size: 18px;">Access Album</h2>
+                            <p class="auth-subtitle">Verify your identity to find your photos</p>
+
+                            <div class="auth-form" style="margin-top: 20px;">
+                                <input type="text" id="contactInputPrivate" placeholder="Enter Email or Phone No"
+                                    autocomplete="username">
+                                <button class="auth-btn" id="sendOtpBtnPrivate"
+                                    onclick="document.getElementById('sendOtpBtn').click();">
+                                    <span class="btn-text">Send OTP</span>
+                                    <span class="btn-loader" style="display: none;">⏳</span>
+                                </button>
+                                <p class="auth-error" id="contactErrorPrivate" style="display: none;"></p>
+                            </div>
+                        </div>
+
+                        <!-- Step 2 and 3 can reuse the existing logic, but we need to ensure the wrapper styling fits -->
                     </div>
                 </div>
             </div>
@@ -219,24 +333,44 @@
                         <h2 id="matchedPhotosTitle"></h2>
                         <p id="matchedPhotosSubtitle"></p>
                     </div>
+                    {% if mode != 'private' %}
                     <button id="showAllPhotosBtn" class="auth-btn"
                         style="width: auto; padding: 8px 16px; font-size: 14px;">
                         Show All Photos
                     </button>
+                    {% endif %}
                 </div>
                 <div id="matchedPhotosGrid" class="photo-grid"></div>
             </div>
 
-            {% if photos and event.privacy == 'full' %}
+            {% if photos and mode != 'private' %}
             <div class="photo-grid">
                 {% for photo in photos %}
                 <div class="photo-card">
                     <img src="{{ url_for('static', filename='uploads/' + photo[0]) }}" alt="Event Photo">
+                    <div class="photo-actions">
+                        <button class="action-button download-btn"
+                            data-url="{{ url_for('static', filename='uploads/' + photo[0]) }}" title="Download">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                            </svg>
+                        </button>
+                        <button class="action-button heart-btn" title="Favorite">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 {% endfor %}
             </div>
             {% else %}
-            <div class="selfie-prompt-card">
+            <div class="selfie-prompt-card"
+                style="margin: 40px auto; max-width: 600px; width: 100%; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-radius: 16px; padding: 40px; background: white;">
                 <!-- <img src="{{ url_for('static', filename='images/cam.png') }}" alt="Abstract image of a person dissolving in a desert" -->
                 <!-- class="prompt-image"> -->
                 <h2 class="prompt-title">Find your photos by clicking a selfie</h2>
@@ -252,11 +386,9 @@
                 <p class="prompt-description">For best results, please click a photo clearly showing your facial
                     features.</p>
 
-                <div class="header">
-                    <div class="logo">
-                        <img src="{{ url_for('static', filename='images/pixmatch-logo.png') }}" alt="PixMatch Logo">
-                    </div>
+                <div class="header" style="display: none;">
                     <div class="header-actions">
+
                         <!-- User Profile Button -->
                         <button class="user-btn" id="userBtn">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -306,20 +438,94 @@
                             </div>
                         </div>
 
-                        <button class="upload-btn" id="uploadBtn">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="17 8 12 3 7 8"></polyline>
-                                <line x1="12" y1="3" x2="12" y2="15"></line>
-                                <div id="uploadStatus" class="upload-status"></div>
+                        <!-- Hidden inputs -->
+                        <input type="file" id="photoInput" accept="image/*" style="display: none;">
+                        <input type="file" id="cameraInput" accept="image/*" capture="environment"
+                            style="display: none;">
+
+                        <div style="display: flex; gap: 12px; align-items: center;">
+                            <button class="upload-btn" id="uploadBtn" title="Upload Photo">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                            </button>
+                            <button class="upload-btn camera-btn" id="cameraBtn" title="Use Camera">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path
+                                        d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z">
+                                    </path>
+                                    <circle cx="12" cy="13" r="4"></circle>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="uploadStatus" class="upload-status"></div>
                     </div>
                 </div>
                 {% endif %}
         </main>
     </div>
 
+    <!-- Floating Favorites Button -->
+    <button class="floating-favorites-btn" id="floatingFavoritesBtn" title="View Favorites">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+        </svg>
+        <span class="favorites-count hidden" id="favoritesCount" style="display: none;">0</span>
+    </button>
+
+    <!-- Favorites Sidebar -->
+    <div class="favorites-sidebar" id="favoritesSidebar">
+        <div class="favorites-header">
+            <h3>Your Favorites</h3>
+            <div class="favorites-header-actions">
+                <button class="more-options-btn" id="favoritesMoreBtn" title="More Options">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="1.5"></circle>
+                        <circle cx="12" cy="5" r="1.5"></circle>
+                        <circle cx="12" cy="19" r="1.5"></circle>
+                    </svg>
+                </button>
+                <div class="favorites-dropdown" id="favoritesDropdown">
+                    <button class="favorites-dropdown-item" id="downloadAllFavoritesBtn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                        Download All
+                    </button>
+                </div>
+                <button class="close-favorites" id="closeFavoritesBtn" title="Close">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <div class="favorites-content" id="favoritesContent">
+            <div class="favorites-empty" id="favoritesEmpty">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                </svg>
+                <p>No favorites yet</p>
+                <small>Click the heart icon on photos to save them here</small>
+            </div>
+            <div class="favorites-grid" id="favoritesGrid" style="display: none;"></div>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <script>
         // User dropdown toggle
         const userBtn = document.getElementById('userBtn');
@@ -339,128 +545,166 @@
                 }
             });
 
-            // Populate user info from session
+            <!-- // Populate user info from session
             {% if session.get('guest_name_' ~event_id) %}
             document.getElementById('userName').textContent = "{{ session.get('guest_name_' ~ event_id) }}";
             {% endif %}
-
+ 
             {% if session.get('guest_email_' ~event_id) %}
             document.getElementById('userEmail').textContent = "{{ session.get('guest_email_' ~ event_id) }}";
             {% elif session.get('otp_contact_' ~event_id) %}
             document.getElementById('userEmail').textContent = "{{ session.get('otp_contact_' ~ event_id) }}";
             {% endif %}
         }
+ 
+        const eventId = {{ event_id }}; -->
 
-        const eventId = {{ event_id }};
+            // Mobile Sidebar Toggle
+            const sidebarToggle = document.getElementById('sidebarToggle');
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.createElement('div');
+            overlay.className = 'sidebar-overlay';
+            document.body.appendChild(overlay);
 
-        // Mobile Sidebar Toggle
-        const sidebarToggle = document.getElementById('sidebarToggle');
-        const sidebar = document.querySelector('.sidebar');
-        const overlay = document.createElement('div');
-        overlay.className = 'sidebar-overlay';
-        document.body.appendChild(overlay);
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    sidebar.classList.toggle('show');
+                    overlay.classList.toggle('show');
+                });
+            }
 
-        if (sidebarToggle) {
-            sidebarToggle.addEventListener('click', function (e) {
-                e.stopPropagation();
-                sidebar.classList.toggle('show');
-                overlay.classList.toggle('show');
+            overlay.addEventListener('click', function () {
+                sidebar.classList.remove('show');
+                overlay.classList.remove('show');
             });
-        }
-
-        overlay.addEventListener('click', function () {
-            sidebar.classList.remove('show');
-            overlay.classList.remove('show');
-        });
     </script>
 
     <script>
-        // Function to display matched photos
-        function displayMatchedPhotos(matchedFiles, count, timeTaken) {
-            const container = document.getElementById('matchedPhotosContainer');
-            const title = document.getElementById('matchedPhotosTitle');
-            const subtitle = document.getElementById('matchedPhotosSubtitle');
-            const grid = document.getElementById('matchedPhotosGrid');
+            // Function to display matched photos
+            function displayMatchedPhotos(matchedFiles, count, timeTaken) {
+                const container = document.getElementById('matchedPhotosContainer');
+                const title = document.getElementById('matchedPhotosTitle');
+                const subtitle = document.getElementById('matchedPhotosSubtitle');
+                const grid = document.getElementById('matchedPhotosGrid');
 
-            // Update title
-            title.textContent = `Found ${count} Matching Photos!`;
-            title.style.display = 'none'; // Hide the title as per user request
-            // Hide processing time subtitle
-            subtitle.style.display = 'none';
-            // Hide the subtitle
+                // Update title
+                title.textContent = `Found ${count} Matching Photos!`;
+                title.style.display = 'none'; // Hide the title as per user request
+                // Hide processing time subtitle
+                subtitle.style.display = 'none';
+                // Hide the subtitle
 
-            // Hide the header entirely as per user request
-            document.querySelector('.matched-photos-header').style.display = 'none';
+                // Hide the header entirely as per user request
+                document.querySelector('.matched-photos-header').style.display = 'none';
 
-            // Ensure container is visible
-            container.style.display = 'block';
+                // Ensure container is visible
+                container.style.display = 'block';
 
-            // Hide the main photo grid if it exists
-            const mainGrid = document.querySelector('.photo-grid:not(#matchedPhotosGrid)');
-            if (mainGrid) {
-                mainGrid.style.display = 'none';
-            }
+                // Hide the main photo grid if it exists
+                const mainGrid = document.querySelector('.photo-grid:not(#matchedPhotosGrid)');
+                if (mainGrid) {
+                    mainGrid.style.display = 'none';
+                }
 
-            // Setup Show All Photos button
-            const showAllBtn = document.getElementById('showAllPhotosBtn');
-            if (showAllBtn) {
-                showAllBtn.onclick = function () {
-                    container.style.display = 'none';
-                    if (mainGrid) {
-                        mainGrid.style.display = 'grid';
-                    }
-                };
-            }
+                // Hide the selfie prompt card if it exists (private mode)
+                const selfiePrompt = document.querySelector('.selfie-prompt-card');
+                if (selfiePrompt) {
+                    selfiePrompt.style.display = 'none';
+                }
 
-            // Clear previous results
-            grid.innerHTML = '';
+                // Setup Show All Photos button
+                const showAllBtn = document.getElementById('showAllPhotosBtn');
+                if (showAllBtn) {
+                    showAllBtn.onclick = function () {
+                        container.style.display = 'none';
+                        if (mainGrid) {
+                            mainGrid.style.display = 'grid';
+                        }
+                    };
+                }
 
-            // Add matched photos to grid
-            matchedFiles.forEach(filename => {
-                const photoCard = document.createElement('div');
-                photoCard.className = 'photo-card';
+                // Clear previous results
+                grid.innerHTML = '';
 
-                const img = document.createElement('img');
-                img.src = `/matchphotos/${filename}`;
-                img.alt = 'Matched Photo';
-                img.onerror = function () {
-                    // If image fails to load from matchphotos, try from static
-                    this.src = `/static/matchphotos/${filename}`;
-                };
+                // Add matched photos to grid
+                matchedFiles.forEach(filename => {
+                    const photoCard = document.createElement('div');
+                    photoCard.className = 'photo-card';
 
-                photoCard.appendChild(img);
-                grid.appendChild(photoCard);
-            });
+                    const img = document.createElement('img');
+                    img.src = `/matchphotos/${filename}`;
+                    img.alt = 'Matched Photo';
+                    img.onerror = function () {
+                        // If image fails to load from matchphotos, try from static
+                        this.src = `/static/matchphotos/${filename}`;
+                    };
 
-            // Show the container
-            container.style.display = 'block';
+                    const actions = document.createElement('div');
+                    actions.className = 'photo-actions';
 
-            // Scroll to results
-            container.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.className = 'action-button download-btn';
+                    downloadBtn.title = 'Download';
+                    downloadBtn.dataset.url = img.src;
+                    downloadBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                `;
 
-        document.addEventListener('DOMContentLoaded', function () {
-            // Header Upload Button Handler
-            const headerUploadButton = document.getElementById('headerUploadButton');
-            const headerPhotoInput = document.getElementById('headerPhotoInput');
+                    const favoriteBtn = document.createElement('button');
+                    favoriteBtn.className = 'action-button heart-btn';
+                    favoriteBtn.title = 'Favorite';
+                    favoriteBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                    </svg>
+                `;
 
-            if (headerUploadButton && headerPhotoInput) {
-                headerUploadButton.addEventListener('click', function () {
-                    headerPhotoInput.click();
+                    actions.appendChild(downloadBtn);
+                    actions.appendChild(favoriteBtn);
+
+                    photoCard.appendChild(img);
+                    photoCard.appendChild(actions);
+                    grid.appendChild(photoCard);
                 });
 
-                headerPhotoInput.addEventListener('change', function (e) {
-                    const file = e.target.files[0];
+                // Show the container
+                container.style.display = 'block';
+
+                // Scroll to results
+                container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                // Setup file inputs and buttons
+                const headerUploadButton = document.getElementById('headerUploadButton');
+                const headerPhotoInput = document.getElementById('headerPhotoInput');
+                const headerCameraButton = document.getElementById('headerCameraButton');
+                const headerCameraInput = document.getElementById('headerCameraInput');
+
+                const uploadButton = document.getElementById('uploadBtn');
+                const photoInput = document.getElementById('photoInput');
+                const cameraBtn = document.getElementById('cameraBtn');
+                const cameraInput = document.getElementById('cameraInput');
+
+                function handleMatchPhotoFile(file, buttonElement, originalHtml) {
                     if (!file) return;
 
                     // Show loading on button
-                    headerUploadButton.disabled = true;
-                    headerUploadButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg><span>Processing...</span>';
+                    if (buttonElement) {
+                        buttonElement.disabled = true;
+                        buttonElement.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg><span style="margin-left:8px;">Processing...</span>';
+                    }
 
                     // Show full screen processing overlay
                     const overlay = document.getElementById('processingOverlay');
-                    if (overlay) {
-                        overlay.style.display = 'flex';
+                    if (overlay) overlay.style.display = 'flex';
+
+                    const uploadStatus = document.getElementById('uploadStatus');
+                    if (uploadStatus) {
+                        uploadStatus.innerHTML = '<div class="status-loading">🔍 Searching for your photos...</div>';
                     }
 
                     const formData = new FormData();
@@ -474,352 +718,709 @@
                         .then(response => response.json())
                         .then(data => {
                             if (data.status === 'success') {
-                                // Display matched photos
                                 displayMatchedPhotos(data.matched_files, data.matches_found, data.time_taken);
+                                if (uploadStatus) {
+                                    uploadStatus.innerHTML = `<div class="status-success">✅ Found ${data.matches_found} photos! Scroll down to view them.</div>`;
+                                }
                             } else {
                                 alert(`❌ ${data.message}`);
+                                if (uploadStatus) uploadStatus.innerHTML = `<div class="status-error">❌ ${data.message}</div>`;
                             }
                         })
                         .catch(error => {
                             alert(`❌ Error: ${error.message}`);
+                            if (uploadStatus) uploadStatus.innerHTML = `<div class="status-error">❌ Error: ${error.message}</div>`;
                         })
                         .finally(() => {
-                            headerUploadButton.disabled = false;
-                            headerUploadButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg><span>Upload</span>';
-                            headerPhotoInput.value = '';
-                        });
-                });
-            }
-
-            // Original Upload Button Handler (for selfie prompt card)
-            const uploadButton = document.getElementById('uploadButton');
-            const photoInput = document.getElementById('photoInput');
-            const uploadStatus = document.getElementById('uploadStatus');
-
-            if (uploadButton && photoInput) {
-                // Click upload button to trigger file input
-                uploadButton.addEventListener('click', function () {
-                    photoInput.click();
-                });
-
-                // Handle file selection
-                photoInput.addEventListener('change', function (e) {
-                    const file = e.target.files[0];
-                    if (!file) return;
-
-                    // Show loading state
-                    uploadStatus.innerHTML = '<div class="status-loading">🔍 Searching for your photos...</div>';
-                    uploadButton.disabled = true;
-                    uploadButton.style.opacity = '0.6';
-
-                    // Create form data
-                    const formData = new FormData();
-                    formData.append('photo', file);
-                    formData.append('event_id', '{{ event_id }}');
-
-                    // Call API
-                    fetch('/api/match_photos', {
-                        method: 'POST',
-                        body: formData
-                    })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.status === 'success') {
-                                // Display matched photos
-                                displayMatchedPhotos(data.matched_files, data.matches_found, data.time_taken);
-                                // Also show success message in status
-                                uploadStatus.innerHTML = `
-                            <div class="status-success">
-                                ✅ Found ${data.matches_found} photos! Scroll down to view them.
-                            </div>
-                        `;
-                            } else {
-                                uploadStatus.innerHTML = `<div class="status-error">❌ ${data.message}</div>`;
+                            if (buttonElement && originalHtml) {
+                                buttonElement.disabled = false;
+                                buttonElement.innerHTML = originalHtml;
                             }
+                            if (headerPhotoInput) headerPhotoInput.value = '';
+                            if (headerCameraInput) headerCameraInput.value = '';
+                            if (photoInput) photoInput.value = '';
+                            if (cameraInput) cameraInput.value = '';
+                            if (overlay) overlay.style.display = 'none';
+                        });
+                }
+
+                if (headerUploadButton && headerPhotoInput) {
+                    const originalHtml = headerUploadButton.innerHTML;
+                    headerUploadButton.addEventListener('click', () => headerPhotoInput.click());
+                    headerPhotoInput.addEventListener('change', (e) => handleMatchPhotoFile(e.target.files[0], headerUploadButton, originalHtml));
+                }
+
+                if (uploadButton && photoInput) {
+                    const originalHtml = uploadButton.innerHTML;
+                    uploadButton.addEventListener('click', () => photoInput.click());
+                    photoInput.addEventListener('change', (e) => handleMatchPhotoFile(e.target.files[0], uploadButton, originalHtml));
+                }
+
+                // Webcam Logic
+                const webcamOverlay = document.getElementById('webcamOverlay');
+                const webcamVideo = document.getElementById('webcamVideo');
+                const webcamCanvas = document.getElementById('webcamCanvas');
+                const closeWebcamBtn = document.getElementById('closeWebcamBtn');
+                const captureWebcamBtn = document.getElementById('captureWebcamBtn');
+                const webcamLoading = document.getElementById('webcamLoading');
+                let stream = null;
+                let activeCameraButton = null;
+                let activeCameraOriginalHtml = null;
+
+                function openWebcam(btnElement, originalHtml) {
+                    activeCameraButton = btnElement;
+                    activeCameraOriginalHtml = originalHtml;
+                    webcamOverlay.style.display = 'flex';
+                    webcamLoading.style.display = 'block';
+                    webcamVideo.style.display = 'none';
+
+                    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+                        .then(mediaStream => {
+                            stream = mediaStream;
+                            webcamVideo.srcObject = stream;
+                            webcamVideo.onloadedmetadata = () => {
+                                webcamVideo.style.display = 'block';
+                                webcamLoading.style.display = 'none';
+                            };
                         })
                         .catch(error => {
-                            uploadStatus.innerHTML = `<div class="status-error">❌ Error: ${error.message}</div>`;
-                        })
-                        .finally(() => {
-                            uploadButton.disabled = false;
-                            uploadButton.style.opacity = '1';
-                            photoInput.value = ''; // Reset input
+                            console.error('Error accessing webcam:', error);
+                            alert('Could not access camera. Please ensure permissions are granted.');
+                            closeWebcam();
                         });
-                });
-            }
-        });
-
-        // OTP Authentication Logic
-        const otpOverlay = document.getElementById('otpOverlay');
-        if (otpOverlay) {
-            let currentContact = '';
-
-            const contactStep = document.getElementById('contactStep');
-            const otpStep = document.getElementById('otpStep');
-            const contactInput = document.getElementById('contactInput');
-            const otpInput = document.getElementById('otpInput');
-            const sendOtpBtn = document.getElementById('sendOtpBtn');
-            const verifyOtpBtn = document.getElementById('verifyOtpBtn');
-            const resendOtpBtn = document.getElementById('resendOtpBtn');
-            const changeContactBtn = document.getElementById('changeContactBtn');
-            const contactError = document.getElementById('contactError');
-            const otpError = document.getElementById('otpError');
-            const otpSuccess = document.getElementById('otpSuccess');
-            const contactDisplay = document.getElementById('contactDisplay');
-
-            // Send OTP
-            sendOtpBtn.addEventListener('click', async function () {
-                const contact = contactInput.value.trim();
-
-                if (!contact) {
-                    showError(contactError, '⚠️ Please enter your email or phone number');
-                    return;
                 }
 
-                // Basic validation
-                if (!contact.includes('@') && !contact.match(/^\+?\d{10,}$/)) {
-                    showError(contactError, '⚠️ Please enter a valid email or phone number');
-                    return;
-                }
-
-                setLoading(sendOtpBtn, true);
-                contactError.style.display = 'none';
-
-                try {
-                    const response = await fetch('/request_otp/{{ event_id }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ contact: contact })
-                    });
-
-                    const data = await response.json();
-
-                    if (response.ok) {
-                        currentContact = contact;
-                        contactDisplay.textContent = contact;
-                        contactStep.style.display = 'none';
-                        otpStep.style.display = 'block';
-                        otpInput.focus();
-
-                        // Show dev mode OTP if present
-                        if (data.message && data.message.includes('OTP')) {
-                            showSuccess(otpSuccess, data.message);
-                        }
-                    } else {
-                        showError(contactError, '❌ ' + (data.error || 'Failed to send OTP'));
+                function closeWebcam() {
+                    webcamOverlay.style.display = 'none';
+                    if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                        stream = null;
                     }
-                } catch (error) {
-                    showError(contactError, '❌ Connection error. Please try again.');
-                } finally {
-                    setLoading(sendOtpBtn, false);
-                }
-            });
-
-            // Verify OTP
-            verifyOtpBtn.addEventListener('click', async function () {
-                const otp = otpInput.value.trim();
-
-                if (!otp || otp.length !== 6) {
-                    showError(otpError, '⚠️ Please enter a 6-digit code');
-                    return;
                 }
 
-                setLoading(verifyOtpBtn, true);
-                otpError.style.display = 'none';
-                otpSuccess.style.display = 'none';
+                if (headerCameraButton) {
+                    const originalHtml = headerCameraButton.innerHTML;
+                    headerCameraButton.addEventListener('click', () => openWebcam(headerCameraButton, originalHtml));
+                }
 
-                try {
-                    const response = await fetch('/verify_otp/{{ event_id }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            contact: currentContact,
-                            otp_code: otp
-                        })
-                    });
+                if (cameraBtn) {
+                    const originalHtml = cameraBtn.innerHTML;
+                    cameraBtn.addEventListener('click', () => openWebcam(cameraBtn, originalHtml));
+                }
 
-                    const data = await response.json();
+                if (closeWebcamBtn) {
+                    closeWebcamBtn.addEventListener('click', closeWebcam);
+                }
 
-                    if (response.ok) {
-                        showSuccess(otpSuccess, '✓ Verified!');
-                        setTimeout(() => {
-                            // Move to user info step
-                            otpStep.style.display = 'none';
-                            userInfoStep.style.display = 'block';
+                if (captureWebcamBtn) {
+                    captureWebcamBtn.addEventListener('click', () => {
+                        if (!stream) return;
 
-                            // Pre-fill email if contact was email
-                            if (currentContact.includes('@')) {
-                                emailInput.value = currentContact;
+                        // Set canvas dimensions to match video
+                        webcamCanvas.width = webcamVideo.videoWidth;
+                        webcamCanvas.height = webcamVideo.videoHeight;
+
+                        // Draw image to canvas
+                        const ctx = webcamCanvas.getContext('2d');
+                        ctx.drawImage(webcamVideo, 0, 0, webcamCanvas.width, webcamCanvas.height);
+
+                        // Convert canvas to Blob (file-like object)
+                        webcamCanvas.toBlob(blob => {
+                            if (blob) {
+                                // Create a File object from the Blob
+                                const file = new File([blob], "webcam_capture.jpg", { type: "image/jpeg" });
+
+                                // Close webcam overlay and stop stream
+                                closeWebcam();
+
+                                // Trigger matching process
+                                handleMatchPhotoFile(file, activeCameraButton, activeCameraOriginalHtml);
                             }
-
-                            firstNameInput.focus();
-                        }, 800);
-                    } else {
-                        showError(otpError, '❌ ' + (data.error || 'Invalid code'));
-                        otpInput.value = '';
-                        otpInput.focus();
-                    }
-                } catch (error) {
-                    showError(otpError, '❌ Connection error. Please try again.');
-                } finally {
-                    setLoading(verifyOtpBtn, false);
+                        }, 'image/jpeg', 0.9);
+                    });
                 }
             });
 
-            // Resend OTP
-            resendOtpBtn.addEventListener('click', async function () {
-                setLoading(resendOtpBtn, true);
-                otpError.style.display = 'none';
-                otpSuccess.style.display = 'none';
+            // OTP Authentication Logic
+            const otpOverlay = document.getElementById('otpOverlay');
+            if (otpOverlay) {
+                let currentContact = '';
 
-                try {
-                    const response = await fetch('/request_otp/{{ event_id }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ contact: currentContact })
-                    });
+                const contactStep = document.getElementById('contactStep');
+                const otpStep = document.getElementById('otpStep');
+                const contactInput = document.getElementById('contactInput');
+                const otpInput = document.getElementById('otpInput');
+                const sendOtpBtn = document.getElementById('sendOtpBtn');
+                const verifyOtpBtn = document.getElementById('verifyOtpBtn');
+                const resendOtpBtn = document.getElementById('resendOtpBtn');
+                const changeContactBtn = document.getElementById('changeContactBtn');
+                const contactError = document.getElementById('contactError');
+                const otpError = document.getElementById('otpError');
+                const otpSuccess = document.getElementById('otpSuccess');
+                const contactDisplay = document.getElementById('contactDisplay');
 
-                    const data = await response.json();
+                // Send OTP
+                sendOtpBtn.addEventListener('click', async function () {
+                    const contact = contactInput.value.trim();
 
-                    if (response.ok) {
-                        showSuccess(otpSuccess, '✓ New code sent!');
-                        otpInput.value = '';
-                        otpInput.focus();
+                    if (!contact) {
+                        showError(contactError, '⚠️ Please enter your email or phone number');
+                        return;
+                    }
 
-                        // Show dev mode OTP if present
-                        if (data.message && data.message.includes('OTP')) {
-                            showSuccess(otpSuccess, data.message);
+                    // Basic validation
+                    if (!contact.includes('@') && !contact.match(/^\+?\d{10,}$/)) {
+                        showError(contactError, '⚠️ Please enter a valid email or phone number');
+                        return;
+                    }
+
+                    setLoading(sendOtpBtn, true);
+                    contactError.style.display = 'none';
+
+                    try {
+                        const response = await fetch('/request_otp/{{ event_id }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ contact: contact })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok) {
+                            currentContact = contact;
+                            contactDisplay.textContent = contact;
+                            contactStep.style.display = 'none';
+                            otpStep.style.display = 'block';
+                            otpInput.focus();
+
+                            // Show dev mode OTP if present
+                            if (data.message && data.message.includes('OTP')) {
+                                showSuccess(otpSuccess, data.message);
+                            }
+                        } else {
+                            showError(contactError, '❌ ' + (data.error || 'Failed to send OTP'));
                         }
-                    } else {
-                        showError(otpError, '❌ ' + (data.error || 'Failed to resend'));
+                    } catch (error) {
+                        showError(contactError, '❌ Connection error. Please try again.');
+                    } finally {
+                        setLoading(sendOtpBtn, false);
                     }
-                } catch (error) {
-                    showError(otpError, '❌ Connection error. Please try again.');
-                } finally {
-                    setLoading(resendOtpBtn, false);
+                });
+
+                // Verify OTP
+                verifyOtpBtn.addEventListener('click', async function () {
+                    const otp = otpInput.value.trim();
+
+                    if (!otp || otp.length !== 6) {
+                        showError(otpError, '⚠️ Please enter a 6-digit code');
+                        return;
+                    }
+
+                    setLoading(verifyOtpBtn, true);
+                    otpError.style.display = 'none';
+                    otpSuccess.style.display = 'none';
+
+                    try {
+                        const response = await fetch('/verify_otp/{{ event_id }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                contact: currentContact,
+                                otp_code: otp
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok) {
+                            showSuccess(otpSuccess, '✓ Verified!');
+                            setTimeout(() => {
+                                // Move to user info step
+                                otpStep.style.display = 'none';
+                                userInfoStep.style.display = 'block';
+
+                                // Pre-fill email if contact was email
+                                if (currentContact.includes('@')) {
+                                    emailInput.value = currentContact;
+                                }
+
+                                firstNameInput.focus();
+                            }, 800);
+                        } else {
+                            showError(otpError, '❌ ' + (data.error || 'Invalid code'));
+                            otpInput.value = '';
+                            otpInput.focus();
+                        }
+                    } catch (error) {
+                        showError(otpError, '❌ Connection error. Please try again.');
+                    } finally {
+                        setLoading(verifyOtpBtn, false);
+                    }
+                });
+
+                // Resend OTP
+                resendOtpBtn.addEventListener('click', async function () {
+                    setLoading(resendOtpBtn, true);
+                    otpError.style.display = 'none';
+                    otpSuccess.style.display = 'none';
+
+                    try {
+                        const response = await fetch('/request_otp/{{ event_id }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ contact: currentContact })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok) {
+                            showSuccess(otpSuccess, '✓ New code sent!');
+                            otpInput.value = '';
+                            otpInput.focus();
+
+                            // Show dev mode OTP if present
+                            if (data.message && data.message.includes('OTP')) {
+                                showSuccess(otpSuccess, data.message);
+                            }
+                        } else {
+                            showError(otpError, '❌ ' + (data.error || 'Failed to resend'));
+                        }
+                    } catch (error) {
+                        showError(otpError, '❌ Connection error. Please try again.');
+                    } finally {
+                        setLoading(resendOtpBtn, false);
+                    }
+                });
+
+                // Submit User Information
+                const userInfoStep = document.getElementById('userInfoStep');
+                const firstNameInput = document.getElementById('firstNameInput');
+                const lastNameInput = document.getElementById('lastNameInput');
+                const emailInput = document.getElementById('emailInput');
+                const submitUserInfoBtn = document.getElementById('submitUserInfoBtn');
+                const userInfoError = document.getElementById('userInfoError');
+
+                submitUserInfoBtn.addEventListener('click', async function () {
+                    const firstName = firstNameInput.value.trim();
+                    const lastName = lastNameInput.value.trim();
+                    const email = emailInput.value.trim();
+
+                    // Validation
+                    if (!firstName) {
+                        showError(userInfoError, '⚠️ Please enter your first name');
+                        return;
+                    }
+
+                    if (!lastName) {
+                        showError(userInfoError, '⚠️ Please enter your last name');
+                        return;
+                    }
+
+                    if (!email || !email.includes('@')) {
+                        showError(userInfoError, '⚠️ Please enter a valid email address');
+                        return;
+                    }
+
+                    setLoading(submitUserInfoBtn, true);
+                    userInfoError.style.display = 'none';
+
+                    try {
+                        const response = await fetch('/save_guest_info/{{ event_id }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                first_name: firstName,
+                                last_name: lastName,
+                                email: email,
+                                contact: currentContact
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok) {
+                            submitUserInfoBtn.querySelector('.btn-text').textContent = '✓ Success! Redirecting...';
+                            setTimeout(() => {
+                                location.reload();
+                            }, 1000);
+                        } else {
+                            showError(userInfoError, '❌ ' + (data.error || 'Failed to save information'));
+                        }
+                    } catch (error) {
+                        showError(userInfoError, '❌ Connection error. Please try again.');
+                    } finally {
+                        setLoading(submitUserInfoBtn, false);
+                    }
+                });
+
+                // Change contact
+                changeContactBtn.addEventListener('click', function () {
+                    otpStep.style.display = 'none';
+                    contactStep.style.display = 'block';
+                    contactInput.value = '';
+                    otpInput.value = '';
+                    contactError.style.display = 'none';
+                    otpError.style.display = 'none';
+                    otpSuccess.style.display = 'none';
+                    contactInput.focus();
+                });
+
+                // Auto-submit on Enter key
+                contactInput.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') {
+                        sendOtpBtn.click();
+                    }
+                });
+
+                otpInput.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') {
+                        verifyOtpBtn.click();
+                    }
+                });
+
+                // Helper functions
+                function setLoading(button, loading) {
+                    const btnText = button.querySelector('.btn-text');
+                    const btnLoader = button.querySelector('.btn-loader');
+
+                    if (loading) {
+                        btnText.style.display = 'none';
+                        btnLoader.style.display = 'inline';
+                        button.disabled = true;
+                    } else {
+                        btnText.style.display = 'inline';
+                        btnLoader.style.display = 'none';
+                        button.disabled = false;
+                    }
+                }
+
+                function showError(element, message) {
+                    element.textContent = message;
+                    element.style.display = 'block';
+                }
+
+                function showSuccess(element, message) {
+                    element.textContent = message;
+                    element.style.display = 'block';
+                }
+            }
+
+            // Handle photo actions (download & favorite)
+            document.addEventListener('click', function (e) {
+                const btn = e.target.closest('.action-button');
+                if (!btn) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (btn.classList.contains('download-btn')) {
+                    let url = btn.dataset.url;
+                    if (!url) {
+                        const img = btn.closest('.photo-card').querySelector('img');
+                        if (img) url = img.src;
+                    }
+                    if (url) {
+                        fetch(url)
+                            .then(response => response.blob())
+                            .then(blob => {
+                                const blobUrl = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = blobUrl;
+                                a.download = url.split('/').pop() || 'photo.jpg';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                window.URL.revokeObjectURL(blobUrl);
+                            })
+                            .catch(err => console.error('Error downloading:', err));
+                    }
+                } else if (btn.classList.contains('heart-btn')) {
+                    btn.classList.toggle('liked');
+                    if (typeof updateFavorites === 'function') {
+                        updateFavorites();
+                    }
                 }
             });
 
-            // Submit User Information
-            const userInfoStep = document.getElementById('userInfoStep');
-            const firstNameInput = document.getElementById('firstNameInput');
-            const lastNameInput = document.getElementById('lastNameInput');
-            const emailInput = document.getElementById('emailInput');
-            const submitUserInfoBtn = document.getElementById('submitUserInfoBtn');
-            const userInfoError = document.getElementById('userInfoError');
+            // Favorites Logic
+            const floatingFavoritesBtn = document.getElementById('floatingFavoritesBtn');
+            const favoritesSidebar = document.getElementById('favoritesSidebar');
+            const closeFavoritesBtn = document.getElementById('closeFavoritesBtn');
+            const favoritesGrid = document.getElementById('favoritesGrid');
+            const favoritesEmpty = document.getElementById('favoritesEmpty');
+            const favoritesCount = document.getElementById('favoritesCount');
+            const favoritesMoreBtn = document.getElementById('favoritesMoreBtn');
+            const favoritesDropdown = document.getElementById('favoritesDropdown');
+            const downloadAllFavoritesBtn = document.getElementById('downloadAllFavoritesBtn');
 
-            submitUserInfoBtn.addEventListener('click', async function () {
-                const firstName = firstNameInput.value.trim();
-                const lastName = lastNameInput.value.trim();
-                const email = emailInput.value.trim();
+            if (floatingFavoritesBtn && favoritesSidebar) {
+                floatingFavoritesBtn.addEventListener('click', () => {
+                    favoritesSidebar.classList.add('open');
+                });
 
-                // Validation
-                if (!firstName) {
-                    showError(userInfoError, '⚠️ Please enter your first name');
-                    return;
+                closeFavoritesBtn.addEventListener('click', () => {
+                    favoritesSidebar.classList.remove('open');
+                    if (favoritesDropdown) favoritesDropdown.classList.remove('show');
+                });
+
+                // Toggle dropdown menu
+                if (favoritesMoreBtn && favoritesDropdown) {
+                    favoritesMoreBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        favoritesDropdown.classList.toggle('show');
+                    });
                 }
 
-                if (!lastName) {
-                    showError(userInfoError, '⚠️ Please enter your last name');
-                    return;
+                document.addEventListener('click', (e) => {
+                    // Close dropdown when clicking outside
+                    if (favoritesDropdown && favoritesDropdown.classList.contains('show') &&
+                        !favoritesDropdown.contains(e.target) &&
+                        !favoritesMoreBtn.contains(e.target)) {
+                        favoritesDropdown.classList.remove('show');
+                    }
+
+                    if (favoritesSidebar.classList.contains('open') &&
+                        !favoritesSidebar.contains(e.target) &&
+                        !floatingFavoritesBtn.contains(e.target) &&
+                        !e.target.closest('.heart-btn') &&
+                        !e.target.closest('.remove-favorite') &&
+                        !e.target.closest('.favorites-header-actions')) {
+                        favoritesSidebar.classList.remove('open');
+                    }
+                });
+
+                // Download all functionality
+                if (downloadAllFavoritesBtn) {
+                    downloadAllFavoritesBtn.addEventListener('click', () => {
+                        // Close dropdown menu
+                        favoritesDropdown.classList.remove('show');
+
+                        const likedBtns = document.querySelectorAll('.photo-card .heart-btn.liked');
+                        const imageUrls = [];
+
+                        likedBtns.forEach(btn => {
+                            const card = btn.closest('.photo-card');
+                            const img = card.querySelector('img');
+                            if (img) {
+                                imageUrls.push(img.src);
+                            }
+                        });
+
+                        if (imageUrls.length === 0) {
+                            alert('No favorite photos to download.');
+                            return;
+                        }
+
+                        // Change button text and optionally disable it while processing
+                        const originalHtml = downloadAllFavoritesBtn.innerHTML;
+                        downloadAllFavoritesBtn.innerHTML = 'Downloading...';
+                        downloadAllFavoritesBtn.style.pointerEvents = 'none';
+
+                        const zip = new JSZip();
+                        let count = 0;
+
+                        imageUrls.forEach(url => {
+                            fetch(url)
+                                .then(response => response.blob())
+                                .then(blob => {
+                                    const filename = url.split('/').pop() || `photo_${count}.jpg`;
+                                    zip.file(filename, blob);
+                                    count++;
+
+                                    if (count === imageUrls.length) {
+                                        zip.generateAsync({ type: "blob" }).then(function (content) {
+                                            saveAs(content, "favorites.zip");
+
+                                            // Reset button
+                                            downloadAllFavoritesBtn.innerHTML = originalHtml;
+                                            downloadAllFavoritesBtn.style.pointerEvents = 'auto';
+                                        });
+                                    }
+                                })
+                                .catch(err => {
+                                    console.error('Error fetching image for zip', err);
+                                    count++;
+                                    if (count === imageUrls.length) {
+                                        zip.generateAsync({ type: "blob" }).then(function (content) {
+                                            saveAs(content, "favorites.zip");
+
+                                            // Reset button
+                                            downloadAllFavoritesBtn.innerHTML = originalHtml;
+                                            downloadAllFavoritesBtn.style.pointerEvents = 'auto';
+                                        });
+                                    }
+                                });
+                        });
+                    });
+                }
+            }
+
+            function updateFavorites() {
+                if (!favoritesGrid) return;
+                favoritesGrid.innerHTML = '';
+                const likedBtns = document.querySelectorAll('.photo-card .heart-btn.liked');
+                let count = likedBtns.length;
+
+                if (count > 0) {
+                    favoritesGrid.style.display = 'grid';
+                    favoritesEmpty.style.display = 'none';
+                    favoritesCount.textContent = count;
+                    favoritesCount.style.display = 'flex';
+                    favoritesCount.classList.remove('hidden');
+
+                    likedBtns.forEach(btn => {
+                        const card = btn.closest('.photo-card');
+                        const img = card.querySelector('img');
+                        if (img) {
+                            const clone = document.createElement('div');
+                            clone.className = 'favorite-item';
+                            clone.innerHTML = `
+                                <img src="${img.src}" alt="Favorite Photo">
+                                <button class="remove-favorite" data-url="${img.src}" title="Remove from Favorites">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                                <div class="favorite-actions">
+                                    <button class="favorite-action-btn download-btn" data-url="${img.src}" title="Download">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            `;
+                            favoritesGrid.appendChild(clone);
+                        }
+                    });
+                } else {
+                    favoritesGrid.style.display = 'none';
+                    favoritesEmpty.style.display = 'flex';
+                    favoritesCount.style.display = 'none';
+                    favoritesCount.classList.add('hidden');
+                }
+            }
+
+            document.addEventListener('click', function (e) {
+                const removeBtn = e.target.closest('.remove-favorite');
+                if (removeBtn) {
+                    const url = removeBtn.dataset.url;
+                    const allPhotos = document.querySelectorAll('.photo-card');
+                    allPhotos.forEach(card => {
+                        const img = card.querySelector('img');
+                        if (img && img.src === url) {
+                            const heartBtn = card.querySelector('.heart-btn');
+                            if (heartBtn) {
+                                heartBtn.classList.remove('liked');
+                            }
+                        }
+                    });
+                    if (typeof updateFavorites === 'function') {
+                        updateFavorites();
+                    }
                 }
 
-                if (!email || !email.includes('@')) {
-                    showError(userInfoError, '⚠️ Please enter a valid email address');
-                    return;
+                const downloadBtn = e.target.closest('.favorite-action-btn.download-btn');
+                if (downloadBtn) {
+                    let url = downloadBtn.dataset.url;
+                    if (url) {
+                        fetch(url)
+                            .then(response => response.blob())
+                            .then(blob => {
+                                const blobUrl = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = blobUrl;
+                                a.download = url.split('/').pop() || 'photo.jpg';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                window.URL.revokeObjectURL(blobUrl);
+                            })
+                            .catch(err => console.error('Error downloading:', err));
+                    }
                 }
+            });
 
-                setLoading(submitUserInfoBtn, true);
-                userInfoError.style.display = 'none';
+            // Initialize favorites state on load
+            if (typeof updateFavorites === 'function') {
+                updateFavorites();
+            }
+
+            // Close the dropdown if clicked outside
+            document.addEventListener('click', function (event) {
+                const dropdown = document.getElementById('moreDropdown');
+                const button = dropdown ? dropdown.previousElementSibling : null;
+                if (dropdown && button && !button.contains(event.target) && !dropdown.contains(event.target)) {
+                    dropdown.style.display = 'none';
+                }
+            });
+
+            async function downloadAllPhotos() {
+                const btn = document.getElementById('downloadAllBtn');
+                const originalContent = btn.innerHTML;
+
+                // Show loading state
+                btn.innerHTML = `<span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 6px;">↻</span> Preparing...`;
+                btn.disabled = true;
+
+                // Ensure spin animation exists
+                if (!document.getElementById('spin-anim-style')) {
+                    const style = document.createElement('style');
+                    style.id = 'spin-anim-style';
+                    style.textContent = '@keyframes spin { 100% { transform: rotate(360deg); } }';
+                    document.head.appendChild(style);
+                }
 
                 try {
-                    const response = await fetch('/save_guest_info/{{ event_id }}', {
+                    // Get all visible photo filenames (everything currently rendered in the gallery)
+                    const photoCards = document.querySelectorAll('.photo-grid .photo-card img');
+                    const filenames = Array.from(photoCards).map(img => {
+                        const urlParts = img.src.split('/');
+                        return urlParts[urlParts.length - 1]; // Extract just the filename at the end of the URL
+                    });
+
+                    if (filenames.length === 0) {
+                        alert("No photos available to download.");
+                        return;
+                    }
+
+                    const response = await fetch('/api/event/{{ event_id }}/download_zip_api', {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/json',
+                            'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({
-                            first_name: firstName,
-                            last_name: lastName,
-                            email: email,
-                            contact: currentContact
-                        })
+                        body: JSON.stringify({ photos: filenames })
                     });
 
                     const data = await response.json();
 
-                    if (response.ok) {
-                        submitUserInfoBtn.querySelector('.btn-text').textContent = '✓ Success! Redirecting...';
-                        setTimeout(() => {
-                            location.reload();
-                        }, 1000);
+                    if (response.ok && data.download_url) {
+                        const a = document.createElement('a');
+                        a.href = data.download_url;
+                        a.download = data.filename || `event_{{ event_id }}_photos.zip`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
                     } else {
-                        showError(userInfoError, '❌ ' + (data.error || 'Failed to save information'));
+                        alert("Error: " + (data.message || "Failed to process request."));
                     }
                 } catch (error) {
-                    showError(userInfoError, '❌ Connection error. Please try again.');
+                    console.error("Download All error:", error);
+                    alert("An error occurred. Please try again later.");
                 } finally {
-                    setLoading(submitUserInfoBtn, false);
-                }
-            });
-
-            // Change contact
-            changeContactBtn.addEventListener('click', function () {
-                otpStep.style.display = 'none';
-                contactStep.style.display = 'block';
-                contactInput.value = '';
-                otpInput.value = '';
-                contactError.style.display = 'none';
-                otpError.style.display = 'none';
-                otpSuccess.style.display = 'none';
-                contactInput.focus();
-            });
-
-            // Auto-submit on Enter key
-            contactInput.addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') {
-                    sendOtpBtn.click();
-                }
-            });
-
-            otpInput.addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') {
-                    verifyOtpBtn.click();
-                }
-            });
-
-            // Helper functions
-            function setLoading(button, loading) {
-                const btnText = button.querySelector('.btn-text');
-                const btnLoader = button.querySelector('.btn-loader');
-
-                if (loading) {
-                    btnText.style.display = 'none';
-                    btnLoader.style.display = 'inline';
-                    button.disabled = true;
-                } else {
-                    btnText.style.display = 'inline';
-                    btnLoader.style.display = 'none';
-                    button.disabled = false;
+                    // Restore button
+                    btn.innerHTML = originalContent;
+                    btn.disabled = false;
+                    document.getElementById('moreDropdown').style.display = 'none';
                 }
             }
-
-            function showError(element, message) {
-                element.textContent = message;
-                element.style.display = 'block';
-            }
-
-            function showSuccess(element, message) {
-                element.textContent = message;
-                element.style.display = 'block';
-            }
-        }
     </script>
 </body>
 

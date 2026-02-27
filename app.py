@@ -13,10 +13,16 @@ from google_auth_oauthlib.flow import Flow
 from google.auth.transport import requests as grequests
 from flask import jsonify
 from flask_mail import Mail, Message
+from PIL import Image, ImageOps
 from matcher import FaceMatcher
 import random
 import string
 from datetime import datetime, timedelta
+import concurrent.futures
+import io
+import zipfile
+import uuid
+from flask import send_from_directory
 
 app = Flask(__name__)
 app.secret_key = '123456'
@@ -78,6 +84,31 @@ def init_db():
             password TEXT
         )
     ''')
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS sub_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (event_id) REFERENCES events (id)
+        )
+    ''')
+    
+    # Check if sub_event_id exists in photos, and add it if not
+    try:
+        cur.execute("ALTER TABLE photos ADD COLUMN sub_event_id INTEGER REFERENCES sub_events(id)")
+    except sqlite3.OperationalError as e:
+        # Ignore error if column already exists
+        if "duplicate column name" not in str(e).lower():
+            pass
+
+    # Check if pin_code exists in events, and add it if not
+    try:
+        cur.execute("ALTER TABLE events ADD COLUMN pin_code TEXT")
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" not in str(e).lower():
+            pass
+            
     conn.commit()
     conn.close()
 
@@ -262,10 +293,31 @@ def signup():
     return render_template('signup.html')
 
 # --- Event Creation Routes ---
+def get_or_create_pin(event_id, conn, return_only=False):
+    """
+    Helper function to get an event's PIN, or create one if it doesn't exist.
+    If return_only is True, it expects a db connection to be handled externally.
+    """
+    cursor = conn.cursor()
+    cursor.execute("SELECT pin_code FROM events WHERE id = ?", (event_id,))
+    row = cursor.fetchone()
+    if row and row[0]:
+        return row[0]
+        
+    # Generate 6-char alphanumeric PIN
+    import string
+    import random
+    new_pin = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    
+    cursor.execute("UPDATE events SET pin_code = ? WHERE id = ?", (new_pin, event_id))
+    conn.commit()
+    return new_pin
+
 @app.route('/create_event', methods=['GET', 'POST'])
 def create_event():
     if 'user_id' not in session:
         return redirect(url_for('login'))
+        
     if request.method == 'POST':
         event_name = request.form['event_name']
         
@@ -287,36 +339,27 @@ def create_event():
                 # Store relative path: event_name/filename
                 cover_photo_filename = f"{secure_filename(event_name)}/{unique_filename}"
         
-        session['event_details'] = {
-            'event_name': event_name,
-            'event_date': request.form['event_date'],
-            'event_venue': request.form['event_venue'],
-            'event_category': request.form['event_category'],
-            'cover_photo': cover_photo_filename
-        }
-        return redirect(url_for('set_privacy'))
-    return render_template('create_event.html')
+        # Generate a random 6-character PIN code for the event
+        import string
+        import random
+        new_pin = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
-@app.route('/set_privacy', methods=['GET', 'POST'])
-def set_privacy():
-    if 'user_id' not in session or 'event_details' not in session:
-        return redirect(url_for('create_event'))
-    if request.method == 'POST':
-        privacy_setting = request.form['privacy']
-        details = session['event_details']
+        # Save event directly to DB, skipping privacy step
         conn = sqlite3.connect('database.db')
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO events (user_id, event_name, event_date, venue, category, privacy, cover_photo)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (session['user_id'], details['event_name'], details['event_date'],
-              details['event_venue'], details['event_category'], privacy_setting, details.get('cover_photo')))
+            INSERT INTO events (user_id, event_name, event_date, venue, category, privacy, cover_photo, pin_code)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (session['user_id'], event_name, request.form['event_date'],
+              request.form['event_venue'], request.form['event_category'], 'Full access', cover_photo_filename, new_pin))
+        
         new_event_id = cursor.lastrowid
         conn.commit()
         conn.close()
-        session.pop('event_details', None)
+        
         return redirect(url_for('add_album', event_id=new_event_id))
-    return render_template('set_privacy.html')
+        
+    return render_template('create_event.html')
 
 # --- Album and Photo Routes ---
 @app.route('/add_album/<int:event_id>')
@@ -341,8 +384,23 @@ def view_album(event_id):
     cursor = conn.cursor()
     cursor.execute("SELECT event_name FROM events WHERE id = ? AND user_id = ?", (event_id, session['user_id']))
     event = cursor.fetchone()
-    cursor.execute("SELECT id, filename FROM photos WHERE event_id = ?", (event_id,))
+    
+    if not event:
+        conn.close()
+        return redirect(url_for('dashboard'))
+
+    # Get or generate a PIN for this event
+    pin_code = get_or_create_pin(event_id, conn, return_only=True)
+    
+    # Fetch root photos (not in any sub-event)
+    cursor.execute("SELECT id, filename FROM photos WHERE event_id = ? AND sub_event_id IS NULL", (event_id,))
     photos = cursor.fetchall()
+    
+    # Fetch sub-events (folders)
+    cursor.execute("SELECT id, name FROM sub_events WHERE event_id = ? ORDER BY created_at DESC", (event_id,))
+    sub_events = cursor.fetchall()
+    
+    conn.commit()
     conn.close()
 
     if event:
@@ -350,8 +408,110 @@ def view_album(event_id):
                                event_name=event[0], 
                                user_first_name=session['first_name'], 
                                event_id=event_id, 
-                               photos=photos)
+                               photos=photos,
+                               sub_events=sub_events,
+                               current_sub_event=None,
+                               pin_code=pin_code)
     return redirect(url_for('dashboard'))
+
+@app.route('/album/<int:event_id>/folder/<int:sub_event_id>')
+def view_sub_album(event_id, sub_event_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    
+    # Verify event ownership
+    cursor.execute("SELECT event_name FROM events WHERE id = ? AND user_id = ?", (event_id, session['user_id']))
+    event = cursor.fetchone()
+    
+    # Verify sub-event exists
+    cursor.execute("SELECT id, name FROM sub_events WHERE id = ? AND event_id = ?", (sub_event_id, event_id))
+    sub_event = cursor.fetchone()
+    
+    if not event or not sub_event:
+        conn.close()
+        return redirect(url_for('view_album', event_id=event_id))
+        
+    # Fetch photos for this sub-event
+    cursor.execute("SELECT id, filename FROM photos WHERE event_id = ? AND sub_event_id = ?", (event_id, sub_event_id))
+    photos = cursor.fetchall()
+    
+    # Get or generate a PIN for this event
+    pin_code = get_or_create_pin(event_id, conn, return_only=True)
+    
+    conn.commit()
+    conn.close()
+
+    return render_template('view_album.html', 
+                           event_name=f"{event[0]} > {sub_event[1]}", 
+                           user_first_name=session['first_name'], 
+                           event_id=event_id, 
+                           photos=photos,
+                           sub_events=[], # Don't show folders inside folders
+                           current_sub_event=sub_event,
+                           pin_code=pin_code)
+
+@app.route('/album/<int:event_id>/create_folder', methods=['POST'])
+def create_sub_event(event_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    folder_name = request.form.get('folder_name', '').strip()
+    if not folder_name:
+        return redirect(url_for('view_album', event_id=event_id))
+        
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    
+    # Verify event ownership
+    cursor.execute("SELECT id FROM events WHERE id = ? AND user_id = ?", (event_id, session['user_id']))
+    if not cursor.fetchone():
+        conn.close()
+        return redirect(url_for('dashboard'))
+        
+    cursor.execute("INSERT INTO sub_events (event_id, name) VALUES (?, ?)", (event_id, folder_name))
+    conn.commit()
+    conn.close()
+    
+    return redirect(url_for('view_album', event_id=event_id))
+
+@app.route('/album/<int:event_id>/folder/<int:sub_event_id>/delete', methods=['POST'])
+def delete_folder(event_id, sub_event_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    
+    # Verify event ownership
+    cursor.execute("SELECT id FROM events WHERE id = ? AND user_id = ?", (event_id, session['user_id']))
+    if not cursor.fetchone():
+        conn.close()
+        return redirect(url_for('dashboard'))
+        
+    # Get all photos in this folder
+    cursor.execute("SELECT filename FROM photos WHERE sub_event_id = ?", (sub_event_id,))
+    photos_to_delete = cursor.fetchall()
+    
+    # Delete physical files
+    for photo in photos_to_delete:
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo[0])
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            app.logger.error(f"Error removing file {file_path}: {e}")
+            
+    # Delete records from DB
+    cursor.execute("DELETE FROM photos WHERE sub_event_id = ?", (sub_event_id,))
+    cursor.execute("DELETE FROM sub_events WHERE id = ? AND event_id = ?", (sub_event_id, event_id))
+    
+    conn.commit()
+    conn.close()
+    
+    return redirect(url_for('view_album', event_id=event_id))
 
 @app.route('/album/<int:event_id>/upload', methods=['POST'])
 def upload_photos(event_id):
@@ -371,25 +531,74 @@ def upload_photos(event_id):
         return "Event not found", 404
     
     event_name = event[0]
-    print(f"DEBUG: Uploading photos for event '{event_name}' (ID: {event_id})")
+    sub_event_id = request.form.get('sub_event_id')
+    compress_quality = request.form.get('compress', '85')
+    
+    print(f"DEBUG: Uploading photos for event '{event_name}' (ID: {event_id}), Folder ID: {sub_event_id}, Compress Quality: {compress_quality}")
     
     # Create event-specific folder
     folder_name = secure_filename(event_name)
     event_folder = os.path.join(app.config['UPLOAD_FOLDER'], folder_name)
-    print(f"DEBUG: Event folder path: {event_folder}")
     os.makedirs(event_folder, exist_ok=True)
     
     files = request.files.getlist('photos')
+    
+    # Helper to process a single photo
+    def process_photo(file_data, filename, save_path, quality_str):
+        if quality_str != '100':
+            try:
+                quality = int(quality_str)
+                # Open from memory bytes
+                img = Image.open(io.BytesIO(file_data))
+                img = ImageOps.exif_transpose(img)
+                if img.mode in ('RGBA', 'P', 'LA'):
+                    img = img.convert('RGB')
+                img.save(save_path, optimize=True, quality=quality)
+                return filename, True
+            except Exception as e:
+                print(f"DEBUG: Compression failed for {filename}: {e}. Saving originally.")
+                # Fallback to saving original bytes
+                with open(save_path, 'wb') as f:
+                    f.write(file_data)
+                return filename, False
+        else:
+            with open(save_path, 'wb') as f:
+                f.write(file_data)
+            return filename, False
+
+    # Extract valid files into memory so we can detach them from the Flask request context
+    tasks = []
     for file in files:
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
-            file.save(os.path.join(event_folder, filename))
+            save_path = os.path.join(event_folder, filename)
+            file_data = file.read()
+            tasks.append((file_data, filename, save_path, compress_quality))
             
-            # Store relative path: event_name/filename
-            relative_path = f"{secure_filename(event_name)}/{filename}"
+    # Process files concurrently
+    processed_filenames = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(process_photo, *task) for task in tasks]
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                fname, _ = future.result()
+                processed_filenames.append(fname)
+            except Exception as e:
+                print(f"DEBUG: Thread processing failed: {e}")
+
+    # Batch insert into database
+    for filename in processed_filenames:
+        relative_path = f"{secure_filename(event_name)}/{filename}"
+        if sub_event_id:
+            cursor.execute("INSERT INTO photos (event_id, sub_event_id, filename) VALUES (?, ?, ?)", (event_id, sub_event_id, relative_path))
+        else:
             cursor.execute("INSERT INTO photos (event_id, filename) VALUES (?, ?)", (event_id, relative_path))
+            
     conn.commit()
     conn.close()
+    
+    if sub_event_id:
+        return redirect(url_for('view_sub_album', event_id=event_id, sub_event_id=sub_event_id))
     return redirect(url_for('view_album', event_id=event_id))
 
 @app.route('/delete_event/<int:event_id>', methods=['POST'])
@@ -418,6 +627,7 @@ def delete_event(event_id):
             print(f"Error deleting file {filename}: {e}")
 
     cursor.execute("DELETE FROM photos WHERE event_id = ?", (event_id,))
+    cursor.execute("DELETE FROM sub_events WHERE event_id = ?", (event_id,))
     cursor.execute("DELETE FROM events WHERE id = ?", (event_id,))
 
     conn.commit()
@@ -458,6 +668,8 @@ def delete_photo(photo_id):
     conn.commit()
     conn.close()
 
+    # We could redirect accurately if we checked sub_event_id before closing DB,
+    # but for simplicity returning to the event works too.
     return redirect(url_for('view_album', event_id=event_id))
 
 # --- Add this new route to handle deleting all photos in an event ---
@@ -797,7 +1009,12 @@ def auth_event(event_id):
         photos = cursor.fetchall()
         conn.close()
         
-        return render_template('share_page.html', event=event, photos=photos, event_id=event_id, otp_verified=True)
+        mode = request.args.get('mode', 'public')
+        
+        if mode == 'private' and not session.get(f'pin_verified_{event_id}'):
+            return render_template('verify_pin.html', event=event, event_id=event_id, mode=mode)
+            
+        return render_template('share_page.html', event=event, photos=photos, event_id=event_id, otp_verified=True, mode=mode)
     
     # Show authentication page
     conn = sqlite3.connect('database.db')
@@ -810,9 +1027,28 @@ def auth_event(event_id):
     conn.close()
     
     if event:
-        return render_template('auth_page.html', event=event, event_id=event_id)
+        mode = request.args.get('mode', 'public')
+        return render_template('auth_page.html', event=event, event_id=event_id, mode=mode)
     else:
         return "Event not found.", 404
+
+@app.route('/auth/event/<int:event_id>/verify_pin', methods=['POST'])
+def verify_pin(event_id):
+    entered_pin = request.form.get('pin_code', '').strip().upper()
+    
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT pin_code FROM events WHERE id = ?", (event_id,))
+    event = cursor.fetchone()
+    conn.close()
+    
+    if event and event[0] == entered_pin:
+        session[f'pin_verified_{event_id}'] = True
+        return redirect(url_for('auth_event', event_id=event_id, mode='private'))
+    
+    # Return to the auth route but we should flash an error or pass a pin_error.
+    # We will let the verify_pin template handle the error param via the URL.
+    return redirect(url_for('auth_event', event_id=event_id, mode='private', error='Invalid Privacy Code'))
 
 
 @app.route('/share/event/<int:event_id>')
@@ -843,7 +1079,8 @@ def share_event(event_id):
     if event:
         # Always redirect to auth page first for share links
         # This ensures guests must authenticate even if they have other sessions
-        return redirect(url_for('auth_event', event_id=event_id))
+        mode = request.args.get('mode', 'public')
+        return redirect(url_for('auth_event', event_id=event_id, mode=mode))
     else:
         # If the event doesn't exist, show a "Not Found" error
         return "Event not found.", 404
@@ -921,12 +1158,157 @@ def match_photos_api():
             except:
                 pass
                 
-            return jsonify(result)
+            return jsonify({
+                'status': 'success', 
+                'match_count': result.get('matches_found', 0),
+                'matched_files': result.get('matched_files', [])
+            })
             
         except Exception as e:
+            app.logger.error(f"Error mapping photos: {e}")
             return jsonify({'status': 'error', 'message': str(e)}), 500
             
     return jsonify({'status': 'error', 'message': 'Invalid file type'}), 400
+
+@app.route('/api/event/<int:event_id>/download_zip_api', methods=['POST'])
+def download_zip_api(event_id):
+    data = request.get_json()
+    if not data or 'photos' not in data:
+        return jsonify({'status': 'error', 'message': 'No photos specified'}), 400
+        
+    photos = data.get('photos', [])
+    if not photos:
+        return jsonify({'status': 'error', 'message': 'Photo list is empty'}), 400
+
+    # Ensure downloads directory exists
+    downloads_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'downloads')
+    os.makedirs(downloads_dir, exist_ok=True)
+    
+    # We will search both the event folder and matchphotos folder
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT event_name FROM events WHERE id = ?", (event_id,))
+    event = cursor.fetchone()
+    conn.close()
+    
+    event_name = event[0] if event else f"event_{event_id}"
+    safe_event_name = secure_filename(event_name)
+    event_folder = os.path.join(app.config['UPLOAD_FOLDER'], safe_event_name)
+    match_folder = os.path.join(base_dir, 'matchphotos')
+
+    # Generate unique zip file
+    zip_filename = f"{safe_event_name}_photos_{uuid.uuid4().hex[:8]}.zip"
+    zip_path = os.path.join(downloads_dir, zip_filename)
+
+    try:
+        # Create ZIP
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for filename in photos:
+                # Try event folder first (if they are using a public link viewing all photos)
+                file_path = os.path.join(event_folder, filename)
+                if not os.path.exists(file_path):
+                    # Try match folder (if they are viewing from their private selfie link)
+                    file_path = os.path.join(match_folder, filename)
+                
+                # Check directly in upload dir as fallback
+                if not os.path.exists(file_path):
+                     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+                if os.path.exists(file_path):
+                    zipf.write(file_path, arcname=filename)
+        
+        # Check if zip actually has files
+        if os.path.getsize(zip_path) < 100: # Basically empty zip
+             os.remove(zip_path)
+             return jsonify({'status': 'error', 'message': 'Could not locate photos on server'}), 500
+
+    except Exception as e:
+        app.logger.error(f"Error creating zip file: {e}")
+        return jsonify({'status': 'error', 'message': 'Error zipping files.'}), 500
+
+    # Construct download URL
+    download_url = request.host_url.rstrip('/') + url_for('download_zip', filename=zip_filename)
+        
+    return jsonify({'status': 'success', 'download_url': download_url, 'filename': zip_filename})
+
+@app.route('/downloads/<filename>')
+def download_zip(filename):
+    downloads_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'downloads')
+    return send_from_directory(downloads_dir, filename, as_attachment=True)
+
+
+# --- API Route for Favoriting Photos ---
+@app.route('/api/toggle_favorite', methods=['POST'])
+def toggle_favorite():
+    data = request.get_json()
+    if not data or 'photo_url' not in data:
+        return jsonify({'status': 'error', 'message': 'Photo URL required'}), 400
+        
+    photo_url = data['photo_url']
+    
+    # Extract filename from URL
+    # URLs might look like /static/uploads/event_name/file.jpg or /matchphotos/file.jpg
+    import urllib.parse
+    filename = urllib.parse.unquote(photo_url.split('/')[-1])
+    
+    # Determine source path
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    source_path = ""
+    
+    print(f"DEBUG: toggle_favorite received photo_url: {photo_url}")
+    print(f"DEBUG: toggle_favorite parsed filename: {filename}")
+    
+    if '/static/uploads/' in photo_url:
+        # It's an event photo, we need the event_name/filename part
+        parts = photo_url.split('/static/uploads/')
+        if len(parts) > 1:
+            rel_path = urllib.parse.unquote(parts[1])
+            source_path = os.path.join(app.config['UPLOAD_FOLDER'], rel_path)
+            print(f"DEBUG: toggle_favorite matched /static/uploads/ with rel_path: {rel_path}")
+        else:
+            source_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            print(f"DEBUG: toggle_favorite matched /static/uploads/ but no rel_path, using filename: {filename}")
+    elif '/matchphotos/' in photo_url:
+        source_path = os.path.join(base_dir, 'matchphotos', filename)
+        print(f"DEBUG: toggle_favorite matched /matchphotos/ source_path: {source_path}")
+    else:
+        # Fallback
+        source_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        print(f"DEBUG: toggle_favorite fallback source_path: {source_path}")
+        
+    print(f"DEBUG: toggle_favorite final source_path: {source_path}")
+        
+    if not os.path.exists(source_path):
+        print(f"DEBUG: toggle_favorite source_path does not exist!")
+        return jsonify({'status': 'error', 'message': 'Original photo not found'}), 404
+        
+    # Setup favorites directory
+    # Depending on requirements, this might need to be per-event or per-user
+    # For now, creating a global favorites folder
+    favorites_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'favorites')
+    os.makedirs(favorites_dir, exist_ok=True)
+    
+    dest_path = os.path.join(favorites_dir, filename)
+    
+    import shutil
+    try:
+        # If it's already favorited, we might want to "unfavorite" it by removing it?
+        # The prompt says "create one favorite folder in this folder stor only favorite photos"
+        # We will assume toggle behavior: if it's there, remove it; if not, copy it.
+        is_favorited = data.get('is_favorited', True)
+        
+        if is_favorited:
+            if not os.path.exists(dest_path):
+                shutil.copy2(source_path, dest_path)
+            return jsonify({'status': 'success', 'message': 'Photo added to favorites', 'action': 'added'})
+        else:
+            if os.path.exists(dest_path):
+                os.remove(dest_path)
+            return jsonify({'status': 'success', 'message': 'Photo removed from favorites', 'action': 'removed'})
+            
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # --- Route to serve matched photos ---
 @app.route('/matchphotos/<path:filename>')

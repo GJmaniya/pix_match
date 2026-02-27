@@ -91,22 +91,182 @@
                     <h2>{{ event_name }}</h2>
                 </div>
 
-                <section class="album-tabs">
-                    <span class="tab-item active">Album <span class="badge">1</span></span>
-                    <span class="tab-item">Photos <span class="badge">{{ photos|length }}</span></span>
+                <section class="album-tabs" style="justify-content: space-between; align-items: center;">
+                    <div style="display: flex; gap: 16px;">
+                        {% if current_sub_event %}
+                        <a href="{{ url_for('view_album', event_id=event_id) }}" class="tab-item"
+                            style="text-decoration: none;">&lt; Back to Album</a>
+                        <span class="tab-item active">{{ current_sub_event[1] }} <span class="badge">{{ photos|length
+                                }}</span></span>
+                        {% else %}
+                        <span class="tab-item active">All Photos <span class="badge">{{ photos|length }}</span></span>
+                        {% endif %}
+                    </div>
+
                     <div class="tab-actions">
-                        <button type="button" id="getUrlBtn" class="btn url-btn">Get URL</button>
+                        {% if not current_sub_event %}
+                        <button type="button" class="btn btn-primary"
+                            onclick="document.getElementById('createFolderModal').style.display='flex'">+ Create
+                            Folder</button>
+                        {% endif %}
+                        <div style="display: flex; align-items: center; margin-right: 12px; margin-left: 8px;">
+                            <label for="compress-select"
+                                style="font-size: 13px; color: #475467; margin-right: 6px; user-select: none;">Photo
+                                Size:</label>
+                            <select id="compress-select"
+                                style="font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid #D0D5DD; background-color: white; color: #101828; cursor: pointer; outline: none;">
+                                <option value="85">Compressed (Recommended)</option>
+                                <option value="50">Medium Size</option>
+                                <option value="20">Small Size</option>
+                                <option value="100">Actual Size (Original)</option>
+                            </select>
+                        </div>
+                        <button type="button" id="addPhotosBtn" class="btn btn-primary" style="margin-right: 8px;"
+                            onclick="document.getElementById('file-input').click()">Add Photos</button>
+                        <div style="position: relative; display: inline-block;">
+                            <button type="button" id="getUrlBtn" class="btn url-btn"
+                                onclick="document.getElementById('urlDropdown').style.display = document.getElementById('urlDropdown').style.display === 'block' ? 'none' : 'block'">Get
+                                URL ▼</button>
+                            <div id="urlDropdown"
+                                style="display: none; position: absolute; right: 0; top: 100%; margin-top: 8px; background: white; border: 1px solid #EAECF0; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 280px; z-index: 100; overflow: hidden; text-align: left;">
+                                <div style="padding: 12px 16px; border-bottom: 1px solid #EAECF0;">
+                                    <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px; color: #101828;">
+                                        Public Link</div>
+                                    <div style="font-size: 12px; color: #667085; margin-bottom: 8px;">Guests can view
+                                        all event photos.</div>
+                                    <button
+                                        onclick="copyToClipboard('{{ request.host_url }}share/event/{{ event_id }}')"
+                                        style="width: 100%; padding: 6px; background: #F2F4F7; border: 1px solid #D0D5DD; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">Copy
+                                        Public Link</button>
+                                </div>
+                                <div style="padding: 12px 16px;">
+                                    <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px; color: #101828;">
+                                        Private Link <span style="background: #E0E7FF;"></span></div>
+                                    <div style="font-size: 12px; color: #667085; margin-bottom: 8px;">Guests only see
+                                        photos matching their face.</div>
+                                    <div
+                                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: #F9FAFB; padding: 8px 12px; border-radius: 6px; border: 1px solid #EAECF0;">
+                                        <div style="font-size: 12px; color: #475467; font-weight: 500;">Privacy Code:
+                                        </div>
+                                        <div
+                                            style="font-family: monospace; font-size: 15px; font-weight: 700; color: #101828; letter-spacing: 1.5px;">
+                                            {{ pin_code }}</div>
+                                    </div>
+                                    <button
+                                        onclick="copyToClipboard('{{ request.host_url }}share/event/{{ event_id }}?mode=private')"
+                                        style="width: 100%; padding: 6px; background: #F2F4F7; border: 1px solid #D0D5DD; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">Copy
+                                        Private Link</button>
+                                </div>
+                            </div>
+                        </div>
+                        {% if not current_sub_event %}
                         <form action="{{ url_for('delete_all_photos', event_id=event_id) }}" method="post"
                             onsubmit="return confirm('Are you sure you want to delete ALL photos in this album? This cannot be undone.');">
                             <button type="submit" class="btn delete-all-btn">Delete All</button>
                         </form>
+                        {% endif %}
                     </div>
                 </section>
 
                 <form id="upload-form" action="{{ url_for('upload_photos', event_id=event_id) }}" method="post"
                     enctype="multipart/form-data">
+                    {% if current_sub_event %}
+                    <input type="hidden" name="sub_event_id" value="{{ current_sub_event[0] }}">
+                    {% endif %}
+                    <input type="hidden" name="compress" id="compress-input" value="true">
                     <input type="file" name="photos" id="file-input" multiple hidden>
                 </form>
+
+                <!-- Create Folder Modal -->
+                <div id="createFolderModal" class="auth-overlay" style="display: none; z-index: 2000;">
+                    <div class="auth-container" style="max-width: 400px; padding: 24px;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3 style="margin: 0; font-size: 20px;">Create New Folder</h3>
+                            <button type="button" class="close-favorites"
+                                onclick="document.getElementById('createFolderModal').style.display='none'">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <form action="{{ url_for('create_sub_event', event_id=event_id) }}" method="POST">
+                            <div class="form-group" style="margin-bottom: 20px;">
+                                <label for="folder_name"
+                                    style="display: block; margin-bottom: 8px; font-weight: 500;">Folder Name</label>
+                                <input type="text" id="folder_name" name="folder_name" class="form-control" required
+                                    style="width: 100%; padding: 10px; border: 1px solid #D0D5DD; border-radius: 8px;">
+                            </div>
+                            <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                                <button type="button" class="btn"
+                                    onclick="document.getElementById('createFolderModal').style.display='none'"
+                                    style="background: white; border: 1px solid #D0D5DD;">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Create Folder</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Folders Display -->
+                {% if not current_sub_event and sub_events %}
+                <div style="margin-bottom: 32px;">
+                    <h3 style="margin-bottom: 16px; font-size: 18px; color: #101828;">Folders</h3>
+                    <div class="photo-grid"
+                        style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px;">
+                        {% for folder in sub_events %}
+                        <div style="position: relative; display: block; border-radius: 12px; transition: all 0.2s ease-in-out; border: 1px solid #EAECF0; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); height: 100%;"
+                            onmouseover="this.style.boxShadow='0 4px 6px rgba(0,0,0,0.05)'; this.style.transform='translateY(-2px)'; this.querySelector('.folder-delete-form').style.opacity='1';"
+                            onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.05)'; this.style.transform='translateY(0)'; this.querySelector('.folder-delete-form').style.opacity='0';">
+
+                            <form class="folder-delete-form"
+                                action="{{ url_for('delete_folder', event_id=event_id, sub_event_id=folder[0]) }}"
+                                method="POST"
+                                style="position: absolute; top: 10px; right: 10px; z-index: 10; opacity: 0; transition: opacity 0.2s;"
+                                onsubmit="return confirm('Are you sure you want to delete this folder and all its photos? This cannot be undone.');">
+                                <button type="submit" class="btn btn-danger"
+                                    style="padding: 6px; border-radius: 6px; background: white; border: 1px solid #fee2e2; color: #ef4444; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;"
+                                    onmouseover="this.style.background='#fef2f2';"
+                                    onmouseout="this.style.background='white';">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                                        xmlns="http://www.w3.org/2000/svg">
+                                        <path
+                                            d="M3 6H21M19 6V20C19 21.1046 18.1046 22 17 22H7C5.89543 22 5 21.1046 5 20V6M8 6V4C8 2.89543 8.89543 2 10 2H14C15.1046 2 16 2.89543 16 4V6M10 11V17M14 11V17"
+                                            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                            stroke-linejoin="round" />
+                                    </svg>
+                                </button>
+                            </form>
+
+                            <a href="{{ url_for('view_sub_album', event_id=event_id, sub_event_id=folder[0]) }}"
+                                style="text-decoration: none; color: inherit; display: block; height: 100%;">
+                                <div class="photo-card"
+                                    style="aspect-ratio: auto; min-height: 120px; padding: 24px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: transparent; border: none; height: 100%; box-sizing: border-box;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24"
+                                        fill="none" stroke="#6366f1" stroke-width="1.5" stroke-linecap="round"
+                                        stroke-linejoin="round" style="margin-bottom: 12px; opacity: 0.9;">
+                                        <path
+                                            d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
+                                        </path>
+                                    </svg>
+                                    <span
+                                        style="font-weight: 600; font-size: 15px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #111827;">{{
+                                        folder[1] }}</span>
+                                </div>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if not current_sub_event and not photos and not sub_events %}
+                <!-- No Photos section header needed if empty -->
+                {% elif not current_sub_event %}
+                <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0; font-size: 18px; color: #101828;">Photos</h3>
+                </div>
+                {% endif %}
 
                 {% if photos %}
                 <div class="photo-grid">
@@ -148,13 +308,20 @@
                     </div>
                     {% endfor %}
                 </div>
-                {% else %}
+                {% elif not sub_events and not current_sub_event %}
                 <section class="empty-state">
                     <img src="{{ url_for('static', filename='images/image.png') }}" alt="Empty album icon">
-                    <h2>Looks like you don't have any photos yet!</h2>
-                    <p>Upload your photos by clicking on Add photos to the Album</p>
-                    <button type="button" class="btn btn-primary"
-                        onclick="document.getElementById('file-input').click()">Add Photos</button>
+                    <h2>Looks like you don't have any photos here yet!</h2>
+                    <p>Upload your photos by clicking on Add photos to the Album or Create a Folder</p>
+                    <div style="display: flex; gap: 16px; justify-content: center;">
+                        <button type="button" class="btn btn-primary"
+                            onclick="document.getElementById('file-input').click()">Add Photos</button>
+                        {% if not current_sub_event %}
+                        <button type="button" class="btn" style="background: white; border: 1px solid #D0D5DD;"
+                            onclick="document.getElementById('createFolderModal').style.display='flex'">Create
+                            Folder</button>
+                        {% endif %}
+                    </div>
                 </section>
                 {% endif %}
             </div>
@@ -169,31 +336,65 @@
     </div>
 
     <script>
-        // Script for auto-submitting file upload
-        document.getElementById('file-input').addEventListener('change', function () {
-            document.getElementById('upload-form').submit();
-        });
+        // Script for copying URL from dropdown
+        function copyToClipboard(url) {
+            navigator.clipboard.writeText(url).then(() => {
+                document.getElementById('urlDropdown').style.display = 'none';
 
-        // Script for Get URL button
-        document.getElementById('getUrlBtn').addEventListener('click', function () {
-            const shareUrl = `{{ request.host_url }}share/event/{{ event_id }}`;
-
-            // Find the input inside the toast and set its value to the URL
-            const toastUrlInput = document.getElementById('toastUrl');
-            toastUrlInput.value = shareUrl;
-
-            navigator.clipboard.writeText(shareUrl).then(() => {
                 const toast = document.getElementById('copyToast');
+                const toastUrlInput = document.getElementById('toastUrl');
+
+                if (toastUrlInput) toastUrlInput.value = url;
                 toast.classList.add('show');
 
                 // Hide the toast after 5 seconds
                 setTimeout(() => {
                     toast.classList.remove('show');
-                }, 5000); // 5000 milliseconds = 5 seconds
+                }, 5000);
             }).catch(err => {
                 console.error('Failed to copy URL: ', err);
                 alert('Failed to copy URL.');
             });
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function (event) {
+            const dropdown = document.getElementById('urlDropdown');
+            const btn = document.getElementById('getUrlBtn');
+            if (dropdown && btn && !dropdown.contains(event.target) && !btn.contains(event.target)) {
+                dropdown.style.display = 'none';
+            }
+        });
+
+        // Script for auto-submitting file upload
+        document.getElementById('file-input').addEventListener('change', function () {
+            if (this.files.length > 0) {
+                // Show loading state
+                const uploadBtn = document.getElementById('addPhotosBtn');
+                if (uploadBtn) {
+                    uploadBtn.disabled = true;
+                    uploadBtn.innerHTML = '<span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 6px;">↻</span> Uploading...';
+                    uploadBtn.style.opacity = '0.7';
+                }
+                const emptyUploadBtn = document.getElementById('emptyAddPhotosBtn');
+                if (emptyUploadBtn) {
+                    emptyUploadBtn.disabled = true;
+                    emptyUploadBtn.innerHTML = '<span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 6px;">↻</span> Uploading...';
+                    emptyUploadBtn.style.opacity = '0.7';
+                }
+
+                // Add simple spin animation CSS if not present
+                if (!document.getElementById('spin-anim-style')) {
+                    const style = document.createElement('style');
+                    style.id = 'spin-anim-style';
+                    style.textContent = '@keyframes spin { 100% { transform: rotate(360deg); } }';
+                    document.head.appendChild(style);
+                }
+
+                // Update hidden input based on select state before submitting
+                document.getElementById('compress-input').value = document.getElementById('compress-select').value;
+                document.getElementById('upload-form').submit();
+            }
         });
 
         // Mobile Sidebar Toggle

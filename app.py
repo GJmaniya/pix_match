@@ -545,23 +545,61 @@ def upload_photos(event_id):
     
     # Helper to process a single photo
     def process_photo(file_data, filename, save_path, quality_str):
-        if quality_str != '100':
+        try:
+            # Load the main image
+            img = Image.open(io.BytesIO(file_data))
+            img = ImageOps.exif_transpose(img)
+            if img.mode in ('RGBA', 'P', 'LA'):
+                img = img.convert('RGB')
+            else:
+                # Ensure it has an alpha channel for watermarking if we are pasting a transparent PNG
+                # but we need the final to be RGB for JPEG saving. We will handle pasting gracefully.
+                pass
+                
+            # --- Apply Watermark ---
             try:
-                quality = int(quality_str)
-                # Open from memory bytes
-                img = Image.open(io.BytesIO(file_data))
-                img = ImageOps.exif_transpose(img)
-                if img.mode in ('RGBA', 'P', 'LA'):
-                    img = img.convert('RGB')
-                img.save(save_path, optimize=True, quality=quality)
-                return filename, True
+                logo_path = os.path.join(app.static_folder, 'images', 'pixmatch-logo.png')
+                if os.path.exists(logo_path):
+                    logo = Image.open(logo_path)
+                    
+                    # Calculate watermark size (e.g., 20% of the main image width)
+                    wm_width = int(img.width * 0.20)
+                    wm_ratio = wm_width / float(logo.width)
+                    wm_height = int(float(logo.height) * float(wm_ratio))
+                    
+                    # Resize logo
+                    logo = logo.resize((wm_width, wm_height), Image.Resampling.LANCZOS)
+                    
+                    # Calculate position (bottom right corner with padding)
+                    padding = int(img.width * 0.02) # 2% padding
+                    position = (img.width - wm_width - padding, img.height - wm_height - padding)
+                    
+                    # Paste the logo, using the logo itself as the mask for transparency
+                    # If the main image is not RGBA, we create a temporary RGBA canvas
+                    if img.mode != 'RGBA':
+                        temp_img = img.convert('RGBA')
+                        temp_img.paste(logo, position, logo)
+                        img = temp_img.convert('RGB')
+                    else:
+                        img.paste(logo, position, logo)
+                        
             except Exception as e:
-                print(f"DEBUG: Compression failed for {filename}: {e}. Saving originally.")
-                # Fallback to saving original bytes
-                with open(save_path, 'wb') as f:
-                    f.write(file_data)
-                return filename, False
-        else:
+                print(f"DEBUG: Failed to apply watermark to {filename}: {e}")
+            # -----------------------
+
+            # Save the processed image
+            if quality_str != '100':
+                quality = int(quality_str)
+                img.save(save_path, optimize=True, quality=quality)
+            else:
+                # Even if original quality is requested, we need to save the watermarked modified image
+                img.save(save_path, quality=95) # Save high quality
+                
+            return filename, True
+            
+        except Exception as e:
+            print(f"DEBUG: Processing/Compression failed for {filename}: {e}. Saving originally.")
+            # Fallback to saving original bytes
             with open(save_path, 'wb') as f:
                 f.write(file_data)
             return filename, False

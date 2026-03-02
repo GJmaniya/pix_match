@@ -10,6 +10,69 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* Photo Preview Modal */
+        .photo-preview-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 5000;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .photo-preview-content {
+            position: relative;
+            max-width: 90%;
+            max-height: 90vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .photo-preview-img {
+            max-width: 100%;
+            max-height: 90vh;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            object-fit: contain;
+        }
+
+        .close-preview-btn {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .close-preview-btn:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        .photo-card img {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .photo-card img:hover {
+            transform: scale(1.02);
+        }
+    </style>
 </head>
 
 <body>
@@ -347,7 +410,8 @@
             <div class="photo-grid">
                 {% for photo in photos %}
                 <div class="photo-card">
-                    <img src="{{ url_for('static', filename='uploads/' + photo[0]) }}" alt="Event Photo">
+                    <img src="{{ url_for('static', filename='uploads/' + photo[0]) }}" alt="Event Photo" loading="lazy"
+                        onclick="openPhotoPreview(this.src)">
                     <div class="photo-actions">
                         <button class="action-button download-btn"
                             data-url="{{ url_for('static', filename='uploads/' + photo[0]) }}" title="Download">
@@ -523,6 +587,20 @@
         </div>
     </div>
 
+    <!-- Photo Preview Modal -->
+    <div id="photoPreviewModal" class="photo-preview-modal" onclick="closePhotoPreview(event)">
+        <div class="photo-preview-content">
+            <button class="close-preview-btn"
+                onclick="document.getElementById('photoPreviewModal').style.display='none'">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+            </button>
+            <img id="previewImage" class="photo-preview-img" src="" alt="Photo Preview">
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -577,6 +655,27 @@
             overlay.addEventListener('click', function () {
                 sidebar.classList.remove('show');
                 overlay.classList.remove('show');
+            });
+
+            // Photo Preview Logic
+            function openPhotoPreview(srcUrl) {
+                const modal = document.getElementById('photoPreviewModal');
+                const previewImg = document.getElementById('previewImage');
+                previewImg.src = srcUrl;
+                modal.style.display = 'flex';
+            }
+
+            function closePhotoPreview(event) {
+                if (event.target.id === 'photoPreviewModal') {
+                    document.getElementById('photoPreviewModal').style.display = 'none';
+                }
+            }
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === "Escape") {
+                    const modal = document.getElementById('photoPreviewModal');
+                    if (modal) modal.style.display = 'none';
+                }
             });
     </script>
 

@@ -81,8 +81,70 @@
             margin-top: 8px;
         }
 
-        .copy-qr-btn:hover {
+        .qr-action-btn:hover {
             background: #E4E7EC;
+        }
+
+        /* Photo Preview Modal Variables */
+        .photo-preview-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 4000;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .photo-preview-content {
+            position: relative;
+            max-width: 90%;
+            max-height: 90vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .photo-preview-img {
+            max-width: 100%;
+            max-height: 90vh;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            object-fit: contain;
+        }
+
+        .close-preview-btn {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .close-preview-btn:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        .photo-card img {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .photo-card img:hover {
+            transform: scale(1.02);
         }
     </style>
 </head>
@@ -315,6 +377,20 @@
                     </div>
                 </div>
 
+                <!-- Photo Preview Modal -->
+                <div id="photoPreviewModal" class="photo-preview-modal" onclick="closePhotoPreview(event)">
+                    <div class="photo-preview-content">
+                        <button class="close-preview-btn"
+                            onclick="document.getElementById('photoPreviewModal').style.display='none'">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 6L6 18M6 6l12 12" />
+                            </svg>
+                        </button>
+                        <img id="previewImage" class="photo-preview-img" src="" alt="Photo Preview">
+                    </div>
+                </div>
+
                 <!-- Folders Display -->
                 {% if not current_sub_event and sub_events %}
                 <div style="margin-bottom: 32px;">
@@ -376,10 +452,12 @@
                 {% endif %}
 
                 {% if photos %}
-                <div class="photo-grid">
+                <div class="photos-grid">
                     {% for photo in photos %}
-                    <div class="photo-card">
-                        <img src="{{ url_for('static', filename='uploads/' + photo[1]) }}" alt="Event Photo">
+                    <div class="photo-card" id="photo-{{ photo.id }}">
+                        <!-- Make the image clickable to preview -->
+                        <img src="{{ url_for('static', filename='uploads/' + photo.filename) }}" alt="Event Photo"
+                            loading="lazy" onclick="openPhotoPreview(this.src)">
                         <div class="photo-overlay">
                             <form action="{{ url_for('delete_photo', photo_id=photo[0]) }}" method="POST"
                                 class="delete-photo-form"
@@ -471,124 +549,136 @@
             if (dropdown && btn && !dropdown.contains(event.target) && !btn.contains(event.target)) {
                 dropdown.style.display = 'none';
             }
-        });
+            function openPhotoPreview(srcUrl) {
+                const modal = document.getElementById('photoPreviewModal');
+                const previewImg = document.getElementById('previewImage');
+                previewImg.src = srcUrl;
+                modal.style.display = 'flex';
+            }
 
-        // QR Code Logic
-        let currentQRCode = null;
+            function closePhotoPreview(event) {
+                // Close if clicked on the overlay background (not the image)
+                if (event.target.id === 'photoPreviewModal') {
+                    document.getElementById('photoPreviewModal').style.display = 'none';
+                }
+            }
 
-        function showQRCode(url, title) {
-            // Close dropdown
-            document.getElementById('urlDropdown').style.display = 'none';
+            // QR Code Logic
+            let currentQRCode = null;
 
-            // Set Title
-            document.getElementById('qrModalTitle').textContent = title;
+            function showQRCode(url, title) {
+                // Close dropdown
+                document.getElementById('urlDropdown').style.display = 'none';
 
-            // Clear existing QR code
-            const qrContainer = document.getElementById('qrcode');
-            qrContainer.innerHTML = '';
+                // Set Title
+                document.getElementById('qrModalTitle').textContent = title;
 
-            // Generate new QR code
-            currentQRCode = new QRCode(qrContainer, {
-                text: url,
-                width: 200,
-                height: 200,
-                colorDark: "#000000",
-                colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.H
+                // Clear existing QR code
+                const qrContainer = document.getElementById('qrcode');
+                qrContainer.innerHTML = '';
+
+                // Generate new QR code
+                currentQRCode = new QRCode(qrContainer, {
+                    text: url,
+                    width: 200,
+                    height: 200,
+                    colorDark: "#000000",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+
+                // Show Modal
+                document.getElementById('qrCodeModal').style.display = 'flex';
+            }
+
+            function downloadQRCode() {
+                const canvas = document.querySelector('#qrcode canvas');
+                if (canvas) {
+                    const url = canvas.toDataURL("image/png");
+                    const a = document.createElement('a');
+                    a.download = 'pixmatch-qr-code.png';
+                    a.href = url;
+                    a.click();
+                }
+            }
+
+            async function copyQRImage() {
+                const canvas = document.querySelector('#qrcode canvas');
+                if (canvas) {
+                    canvas.toBlob(async blob => {
+                        try {
+                            const item = new ClipboardItem({ "image/png": blob });
+                            await navigator.clipboard.write([item]);
+                            const toast = document.getElementById('copyToast');
+                            const toastUrlInput = document.getElementById('toastUrl');
+                            if (toastUrlInput) toastUrlInput.value = 'QR Code Copied to Clipboard!';
+                            toast.classList.add('show');
+                            setTimeout(() => { toast.classList.remove('show'); }, 3000);
+                        } catch (err) {
+                            console.error("Failed to copy QR code: ", err);
+                            alert("Failed to copy image. Your browser might not support this feature.");
+                        }
+                    });
+                }
+            }
+            document.addEventListener('click', function (event) {
+                const dropdown = document.getElementById('urlDropdown');
+                const btn = document.getElementById('getUrlBtn');
+                if (dropdown && btn && !dropdown.contains(event.target) && !btn.contains(event.target)) {
+                    dropdown.style.display = 'none';
+                }
             });
 
-            // Show Modal
-            document.getElementById('qrCodeModal').style.display = 'flex';
-        }
-
-        function downloadQRCode() {
-            const canvas = document.querySelector('#qrcode canvas');
-            if (canvas) {
-                const url = canvas.toDataURL("image/png");
-                const a = document.createElement('a');
-                a.download = 'pixmatch-qr-code.png';
-                a.href = url;
-                a.click();
-            }
-        }
-
-        async function copyQRImage() {
-            const canvas = document.querySelector('#qrcode canvas');
-            if (canvas) {
-                canvas.toBlob(async blob => {
-                    try {
-                        const item = new ClipboardItem({ "image/png": blob });
-                        await navigator.clipboard.write([item]);
-                        const toast = document.getElementById('copyToast');
-                        const toastUrlInput = document.getElementById('toastUrl');
-                        if (toastUrlInput) toastUrlInput.value = 'QR Code Copied to Clipboard!';
-                        toast.classList.add('show');
-                        setTimeout(() => { toast.classList.remove('show'); }, 3000);
-                    } catch (err) {
-                        console.error("Failed to copy QR code: ", err);
-                        alert("Failed to copy image. Your browser might not support this feature.");
+            // Script for auto-submitting file upload
+            document.getElementById('file-input').addEventListener('change', function () {
+                if (this.files.length > 0) {
+                    // Show loading state
+                    const uploadBtn = document.getElementById('addPhotosBtn');
+                    if (uploadBtn) {
+                        uploadBtn.disabled = true;
+                        uploadBtn.innerHTML = '<span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 6px;">↻</span> Uploading...';
+                        uploadBtn.style.opacity = '0.7';
                     }
+                    const emptyUploadBtn = document.getElementById('emptyAddPhotosBtn');
+                    if (emptyUploadBtn) {
+                        emptyUploadBtn.disabled = true;
+                        emptyUploadBtn.innerHTML = '<span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 6px;">↻</span> Uploading...';
+                        emptyUploadBtn.style.opacity = '0.7';
+                    }
+
+                    // Add simple spin animation CSS if not present
+                    if (!document.getElementById('spin-anim-style')) {
+                        const style = document.createElement('style');
+                        style.id = 'spin-anim-style';
+                        style.textContent = '@keyframes spin { 100% { transform: rotate(360deg); } }';
+                        document.head.appendChild(style);
+                    }
+
+                    // Update hidden input based on select state before submitting
+                    document.getElementById('compress-input').value = document.getElementById('compress-select').value;
+                    document.getElementById('upload-form').submit();
+                }
+            });
+
+            // Mobile Sidebar Toggle
+            const sidebarToggle = document.getElementById('sidebarToggle');
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.createElement('div');
+            overlay.className = 'sidebar-overlay';
+            document.body.appendChild(overlay);
+
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    sidebar.classList.toggle('show');
+                    overlay.classList.toggle('show');
                 });
             }
-        }
-        document.addEventListener('click', function (event) {
-            const dropdown = document.getElementById('urlDropdown');
-            const btn = document.getElementById('getUrlBtn');
-            if (dropdown && btn && !dropdown.contains(event.target) && !btn.contains(event.target)) {
-                dropdown.style.display = 'none';
-            }
-        });
 
-        // Script for auto-submitting file upload
-        document.getElementById('file-input').addEventListener('change', function () {
-            if (this.files.length > 0) {
-                // Show loading state
-                const uploadBtn = document.getElementById('addPhotosBtn');
-                if (uploadBtn) {
-                    uploadBtn.disabled = true;
-                    uploadBtn.innerHTML = '<span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 6px;">↻</span> Uploading...';
-                    uploadBtn.style.opacity = '0.7';
-                }
-                const emptyUploadBtn = document.getElementById('emptyAddPhotosBtn');
-                if (emptyUploadBtn) {
-                    emptyUploadBtn.disabled = true;
-                    emptyUploadBtn.innerHTML = '<span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 6px;">↻</span> Uploading...';
-                    emptyUploadBtn.style.opacity = '0.7';
-                }
-
-                // Add simple spin animation CSS if not present
-                if (!document.getElementById('spin-anim-style')) {
-                    const style = document.createElement('style');
-                    style.id = 'spin-anim-style';
-                    style.textContent = '@keyframes spin { 100% { transform: rotate(360deg); } }';
-                    document.head.appendChild(style);
-                }
-
-                // Update hidden input based on select state before submitting
-                document.getElementById('compress-input').value = document.getElementById('compress-select').value;
-                document.getElementById('upload-form').submit();
-            }
-        });
-
-        // Mobile Sidebar Toggle
-        const sidebarToggle = document.getElementById('sidebarToggle');
-        const sidebar = document.querySelector('.sidebar');
-        const overlay = document.createElement('div');
-        overlay.className = 'sidebar-overlay';
-        document.body.appendChild(overlay);
-
-        if (sidebarToggle) {
-            sidebarToggle.addEventListener('click', function (e) {
-                e.stopPropagation();
-                sidebar.classList.toggle('show');
-                overlay.classList.toggle('show');
+            overlay.addEventListener('click', function () {
+                sidebar.classList.remove('show');
+                overlay.classList.remove('show');
             });
-        }
-
-        overlay.addEventListener('click', function () {
-            sidebar.classList.remove('show');
-            overlay.classList.remove('show');
-        });
     </script>
 </body>
 

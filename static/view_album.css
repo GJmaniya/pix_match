@@ -93,27 +93,25 @@
 }
 
 .photo-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
+    column-count: auto;
+    column-width: 250px;
+    column-gap: 16px;
     padding: 24px 0;
 }
 
 .photo-card {
     position: relative;
     width: 100%;
-    /* aspect-ratio removed so image shows naturally */
+    margin-bottom: 16px;
+    break-inside: avoid;
     border-radius: 8px;
     overflow: hidden;
     background-color: #f8f9fa;
-    /* Add a slight background for varied aspect ratios */
 }
 
 .photo-card img {
     width: 100%;
-    height: 100%;
-    object-fit: contain;
-    /* Changed from cover to contain so the watermark is not cropped */
+    display: block;
 }
 
 .photo-overlay {

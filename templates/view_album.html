@@ -454,9 +454,9 @@
                 {% if photos %}
                 <div class="photos-grid">
                     {% for photo in photos %}
-                    <div class="photo-card" id="photo-{{ photo.id }}">
+                    <div class="photo-card" id="photo-{{ photo[0] }}">
                         <!-- Make the image clickable to preview -->
-                        <img src="{{ url_for('static', filename='uploads/' + photo.filename) }}" alt="Event Photo"
+                        <img src="{{ url_for('static', filename='uploads/' + photo[1]) }}" alt="Event Photo"
                             loading="lazy" onclick="openPhotoPreview(this.src)">
                         <div class="photo-overlay">
                             <form action="{{ url_for('delete_photo', photo_id=photo[0]) }}" method="POST"

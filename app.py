@@ -558,7 +558,7 @@ def upload_photos(event_id):
                 
             # --- Apply Watermark ---
             try:
-                logo_path = os.path.join(app.static_folder, 'images', 'pixmatch-logo.png')
+                logo_path = os.path.join(app.static_folder, 'images', 'MM LOGO.png')
                 if os.path.exists(logo_path):
                     logo = Image.open(logo_path)
                     

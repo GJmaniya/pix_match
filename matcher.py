@@ -60,18 +60,35 @@ class FaceMatcher:
         Loads embeddings from cache if available, updating it for new/deleted files.
         Returns a dictionary mapping filename -> embeddings (numpy array).
         """
-        # Get all image files recursively
+        # Get all image files recursively, but ONLY those present in the database
+        import sqlite3
+        conn = sqlite3.connect('database.db')
+        cursor = conn.cursor()
+        
+        # We need to extract just the filenames from the database relative paths 
+        # (which are stored like 'event_name/filename.jpg' or 'event_name/subfolder/filename.jpg')
+        cursor.execute("SELECT filename FROM photos")
+        db_photos = cursor.fetchall()
+        
+        # The stored format might be `Event Name/file.jpg`. We extract the basename (file.jpg)
+        # to match against the files found in the directory.
+        valid_basenames = set(os.path.basename(p[0]) for p in db_photos)
+        
+        conn.close()
+
         current_files = set()
         for root, _, files in os.walk(search_dir):
             for file in files:
                 if file.lower().endswith(('.jpg', '.jpeg', '.png')):
-                    # Use relative path from search_dir
-                    rel_dir = os.path.relpath(root, search_dir)
-                    if rel_dir == '.':
-                        rel_path = file
-                    else:
-                        rel_path = os.path.join(rel_dir, file)
-                    current_files.add(rel_path)
+                    # Only include files that are officially registered in the database
+                    if file in valid_basenames:
+                        # Use relative path from search_dir
+                        rel_dir = os.path.relpath(root, search_dir)
+                        if rel_dir == '.':
+                            rel_path = file
+                        else:
+                            rel_path = os.path.join(rel_dir, file)
+                        current_files.add(rel_path)
         
         file_embeddings = {}
         cache_needs_update = False

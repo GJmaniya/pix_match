@@ -635,9 +635,29 @@ def upload_photos(event_id):
     conn.commit()
     conn.close()
     
+    # Auto-train ML model in the background
+    try:
+        import threading
+        # Ensure matcher processes the new embedding without blocking the user upload request
+        cache_path = os.path.join(event_folder, "embeddings_cache.pt")
+        def train_model():
+            try:
+                print(f"DEBUG: Starting background auto-training for event {event_name}...")
+                matcher.load_or_compute_directory_embeddings(event_folder, cache_path)
+                print(f"DEBUG: Completed background auto-training for event {event_name}.")
+            except Exception as e:
+                print(f"DEBUG: Background training failed: {e}")
+                
+        bg_thread = threading.Thread(target=train_model)
+        bg_thread.daemon = True
+        bg_thread.start()
+    except Exception as e:
+        print(f"DEBUG: Failed to start auto-train thread: {e}")
+
     if sub_event_id:
         return redirect(url_for('view_sub_album', event_id=event_id, sub_event_id=sub_event_id))
     return redirect(url_for('view_album', event_id=event_id))
+
 
 @app.route('/delete_event/<int:event_id>', methods=['POST'])
 def delete_event(event_id):
@@ -749,6 +769,47 @@ def delete_all_photos(event_id):
     # Redirect back to the album page, which will now be empty
     return redirect(url_for('view_album', event_id=event_id))
 
+# --- Add this new route for the public-facing "Find Photos" page ---
+
+@app.route('/event/<int:event_id>/guests')
+def guest_visitors(event_id):
+    # Security check: ensure user is logged in
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    conn = sqlite3.connect('database.db')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    # Security check: ensure the event belongs to the current user
+    cursor.execute("SELECT * FROM events WHERE id = ?", (event_id,))
+    event = cursor.fetchone()
+    if not event or event['user_id'] != session['user_id']:
+        conn.close()
+        return redirect(url_for('dashboard'))
+
+    # Fetch all guest visitors for this event
+    cursor.execute("""
+        SELECT * FROM guest_users 
+        WHERE event_id = ? 
+        ORDER BY created_at DESC
+    """, (event_id,))
+    guests = cursor.fetchall()
+
+    # Also fetch standard event data required by the sidebar
+    cursor.execute("SELECT first_name FROM users WHERE id = ?", (session['user_id'],))
+    user_row = cursor.fetchone()
+    user_first_name = user_row['first_name'] if user_row else 'User'
+    
+    conn.close()
+
+    return render_template('guest_visitors.html', 
+                           event=event, 
+                           guests=guests, 
+                           event_name=event['event_name'],
+                           event_id=event_id,
+                           user_first_name=user_first_name)
+                           
 # --- Add this new route for the public-facing "Find Photos" page ---
 
 @app.route('/event/<int:event_id>/find')
@@ -953,10 +1014,6 @@ def save_guest_info(event_id):
     if not email and not phone:
         return jsonify({'error': 'Either email or phone is required'}), 400
     
-    # Check if OTP was verified for this event
-    if not session.get(f'otp_verified_{event_id}'):
-        return jsonify({'error': 'OTP verification required'}), 403
-    
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
     
@@ -1015,6 +1072,7 @@ def save_guest_info(event_id):
     
     # Mark as fully authenticated
     session[f'guest_info_complete_{event_id}'] = True
+    session[f'otp_verified_{event_id}'] = True
     session[f'guest_name_{event_id}'] = f'{first_name} {last_name}'
     session[f'guest_email_{event_id}'] = final_email or final_phone
     
@@ -1091,13 +1149,8 @@ def verify_pin(event_id):
 
 @app.route('/share/event/<int:event_id>')
 def share_event(event_id):
-    # Clear any existing guest authentication for this event
-    # This ensures users must login every time they access the share link
-    session.pop(f'otp_verified_{event_id}', None)
-    session.pop(f'guest_info_complete_{event_id}', None)
-    session.pop(f'guest_name_{event_id}', None)
-    session.pop(f'guest_email_{event_id}', None)
-    session.pop(f'otp_contact_{event_id}', None)
+    # Make the guest's session persistent so they don't have to re-enter details
+    session.permanent = True
     
     conn = sqlite3.connect('database.db')
     # Use row_factory to get results as dictionaries for easy access in the template
@@ -1139,6 +1192,105 @@ def match_photos_api():
         # Save temp user photo
         user_photo_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_search_{int(time.time())}_{filename}")
         file.save(user_photo_path)
+        
+        # Define directories
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Default to Bhuman if no event specified (backward compatibility)
+        search_dir = os.path.join(base_dir, 'Bhuman') 
+        
+        # Check if event_id is provided
+        event_id = request.form.get('event_id')
+        if event_id:
+            conn = sqlite3.connect('database.db')
+            cursor = conn.cursor()
+            cursor.execute("SELECT event_name FROM events WHERE id = ?", (event_id,))
+            event = cursor.fetchone()
+            conn.close()
+            
+            if event:
+                event_name = event[0]
+                # Use the event's upload folder
+                search_dir = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(event_name))
+                print(f"DEBUG: Searching in event folder: {search_dir}")
+        else:
+            print("DEBUG: searching in default Bhuman folder")
+
+        match_output_dir = os.path.join(base_dir, 'matchphotos')
+        
+        # Run matching
+        try:
+            # Clear matchphotos directory before starting a new search
+            if os.path.exists(match_output_dir):
+                import shutil
+                for f in os.listdir(match_output_dir):
+                    file_path = os.path.join(match_output_dir, f)
+                    try:
+                        if os.path.isfile(file_path) or os.path.islink(file_path):
+                            os.unlink(file_path)
+                        elif os.path.isdir(file_path):
+                            shutil.rmtree(file_path)
+                    except Exception as e:
+                        app.logger.error(f"Error clearing matchphotos file {f}: {e}")
+            else:
+                os.makedirs(match_output_dir, exist_ok=True)
+
+            result = matcher.find_matches(
+                user_photo_path, 
+                search_dir, 
+                match_output_dir,
+                tolerance=0.60
+            )
+            
+            match_count = result.get('matches_found', 0)
+            
+            # ---- Save persistent copy for guest visitors tracking ----
+            if event_id and session.get(f'guest_info_complete_{event_id}'):
+                try:
+                    guest_email = session.get(f'guest_email_{event_id}')
+                    if guest_email:
+                        # Create a persistent copy
+                        guest_faces_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'guest_faces')
+                        os.makedirs(guest_faces_dir, exist_ok=True)
+                        
+                        persistent_filename = f"guest_{event_id}_{int(time.time())}_{filename}"
+                        persistent_path = os.path.join(guest_faces_dir, persistent_filename)
+                        
+                        import shutil
+                        shutil.copy2(user_photo_path, persistent_path)
+                        
+                        # Update database
+                        conn = sqlite3.connect('database.db')
+                        cursor = conn.cursor()
+                        
+                        # We might have email or phone in the session variable 'guest_email'
+                        cursor.execute('''
+                            UPDATE guest_users 
+                            SET photo_path = ?, matches_found = ?
+                            WHERE event_id = ? AND (email = ? OR phone = ?)
+                        ''', (persistent_filename, match_count, event_id, guest_email, guest_email))
+                        
+                        conn.commit()
+                        conn.close()
+                except Exception as e:
+                    app.logger.error(f"Error saving guest profile face: {e}")
+            # -------------------------------------------------------------
+            
+            # Remove temp file
+            try:
+                os.remove(user_photo_path)
+            except:
+                pass
+                
+            return jsonify({
+                'status': 'success', 
+                'match_count': match_count,
+                'matched_files': result.get('matched_files', [])
+            })
+            
+        except Exception as e:
+            app.logger.error(f"Error mapping photos: {e}")
+            return jsonify({'status': 'error', 'message': str(e)}), 500
         
         # Define directories
         base_dir = os.path.dirname(os.path.abspath(__file__))

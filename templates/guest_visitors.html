@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visitor Log - {{ event_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='view_album.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .visitor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 24px;
+            margin-top: 24px;
+        }
+
+        .visitor-card {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #EAECF0;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .visitor-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .visitor-photo {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: cover;
+            background: #F9FAFB;
+            border-bottom: 1px solid #EAECF0;
+        }
+
+        .visitor-no-photo {
+            width: 100%;
+            aspect-ratio: 1;
+            background: #F2F4F7;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: #667085;
+            border-bottom: 1px solid #EAECF0;
+        }
+
+        .visitor-details {
+            padding: 16px;
+        }
+
+        .visitor-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #101828;
+            margin: 0 0 4px 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .visitor-contact {
+            font-size: 14px;
+            color: #475467;
+            margin: 0 0 12px 0;
+            word-break: break-all;
+        }
+
+        .visitor-meta {
+            font-size: 12px;
+            color: #667085;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+    </style>
+
+    </head>
+
+<body>
+    <div class="dashboard-container">
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <div class="logo">
+                    <a href="{{ url_for('dashboard') }}" style="text-decoration: none; cursor: pointer;">
+                        <img src="{{ url_for('static', filename='images/pixmatch-logo.png') }}" alt="PixMatch Logo">
+                    </a>
+                </div>
+                <nav class="sidebar-nav">
+                    <ul>
+                        <li><a href="#"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                    xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M3 12H21M3 6H21M3 18H15" stroke="#667085" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                </svg> Collapse</a></li>
+                        <li><a href="{{ url_for('dashboard') }}"><svg width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path
+                                        d="M19 4H5C3.89543 4 3 4.89543 3 6V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V6C21 4.89543 20.1046 4 19 4Z"
+                                        stroke="#667085" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                    <path d="M16 2V6M8 2V6M3 10H21" stroke="#667085" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                </svg> My Events</a></li>
+                        <li><a href="{{ url_for('add_album', event_id=event_id) }}"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path
+                                        d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z"
+                                        stroke="#667085" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                    <path d="M9 22V12H15V22" stroke="#667085" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                </svg> Event Home</a></li>
+                        <li class="active"><a href="{{ url_for('guest_visitors', event_id=event_id) }}"><svg width="24"
+                                    height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path
+                                        d="M16 21V19C16 17.9391 15.5786 16.9217 14.8284 16.1716C14.0783 15.4214 13.0609 15 12 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21"
+                                        stroke="white" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                    <path
+                                        d="M8.5 11C10.7091 11 12.5 9.20914 12.5 7C12.5 4.79086 10.7091 3 8.5 3C6.29086 3 4.5 4.79086 4.5 7C4.5 9.20914 6.29086 11 8.5 11Z"
+                                        stroke="white" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                    <path d="M17 11L19 13L23 9" stroke="white" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                </svg> Visitor Log</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="main-header">
+                <div class="header-left">
+                    <button class="sidebar-toggle" id="sidebarToggle">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 12H21M3 6H21M3 18H21" stroke="#344054" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round" />
+                        </svg>
+                    </button>
+                    <h2>Welcome, {{ user_first_name }}</h2>
+                </div>
+                <div class="user-profile">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                            d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21"
+                            stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        <path
+                            d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z"
+                            stroke="#344054" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                </div>
+            </header>
+
+            <div class="content-wrapper">
+                <div class="form-header">
+                    <a href="{{ url_for('view_album', event_id=event_id) }}" class="back-link"><svg width="20"
+                            height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12.5 15L7.5 10L12.5 5" stroke="#344054" stroke-width="1.66667"
+                                stroke-linecap="round" stroke-linejoin="round" />
+                        </svg></a>
+                    <h2>{{ event_name }} - Visitor Log</h2>
+                </div>
+
+                <p style="color: #475467; margin-bottom: 24px;">View the guests who have accessed your event photos and
+                    their submitted selfies.</p>
+
+                {% if guests %}
+                <div class="table-container"
+                    style="background: white; border-radius: 12px; border: 1px solid #EAECF0; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-top: 24px;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                        <thead style="background: #F9FAFB; border-bottom: 1px solid #EAECF0;">
+                            <tr>
+                                <th
+                                    style="padding: 12px 24px; font-weight: 500; font-size: 12px; color: #475467; text-transform: uppercase; letter-spacing: 0.05em;">
+                                    Visitor</th>
+                                <th
+                                    style="padding: 12px 24px; font-weight: 500; font-size: 12px; color: #475467; text-transform: uppercase; letter-spacing: 0.05em;">
+                                    Contact Info</th>
+                                <th
+                                    style="padding: 12px 24px; font-weight: 500; font-size: 12px; color: #475467; text-transform: uppercase; letter-spacing: 0.05em;">
+                                    Matches Found</th>
+                                <th
+                                    style="padding: 12px 24px; font-weight: 500; font-size: 12px; color: #475467; text-transform: uppercase; letter-spacing: 0.05em;">
+                                    Joined Date</th>
+                            </tr>
+                        </thead>
+                        <tbody style="font-size: 14px; color: #101828;">
+                            {% for guest in guests %}
+                            <tr style="border-bottom: 1px solid #EAECF0;">
+                                <td style="padding: 16px 24px;">
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        {% if guest.photo_path %}
+                                        <img src="{{ url_for('static', filename='uploads/guest_faces/' + guest.photo_path) }}"
+                                            alt="{{ guest.first_name }}'s Selfie"
+                                            style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1px solid #EAECF0;">
+                                        {% else %}
+                                        <div
+                                            style="width: 40px; height: 40px; border-radius: 50%; background: #F2F4F7; display: flex; align-items: center; justify-content: center; color: #667085;">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                                xmlns="http://www.w3.org/2000/svg">
+                                                <path
+                                                    d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21"
+                                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                    stroke-linejoin="round" />
+                                                <path
+                                                    d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z"
+                                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                    stroke-linejoin="round" />
+                                            </svg>
+                                        </div>
+                                        {% endif %}
+                                        <div style="font-weight: 500;">{{ guest.first_name }} {{ guest.last_name }}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td style="padding: 16px 24px; color: #475467;">
+                                    {{ guest.email or guest.phone }}
+                                </td>
+                                <td style="padding: 16px 24px;">
+                                    <div
+                                        style="display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; background: {% if guest.matches_found %}#ECFDF3; color: #027A48{% else %}#F2F4F7; color: #475467{% endif %};">
+                                        {% if guest.matches_found %}
+                                        {{ guest.matches_found }} Photo(s)
+                                        {% else %}
+                                        0 Photos
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td style="padding: 16px 24px; color: #475467;">
+                                    {{ guest.created_at[:10] }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <section class="empty-state">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+                        style="margin-bottom: 24px; color: #D0D5DD;">
+                        <path
+                            d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                        <path d="M23 11V19L19 15L23 11Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                    <h2>No visitors yet!</h2>
+                    <p>Once guests visit your event link and upload their selfie, they will appear here.</p>
+                </section>
+                {% endif %}
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Mobile Sidebar Toggle
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const sidebar = document.querySelector('.sidebar');
+        const overlay = document.createElement('div');
+        overlay.className = 'sidebar-overlay';
+        document.body.appendChild(overlay);
+
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+                sidebar.classList.toggle('show');
+                overlay.classList.toggle('show');
+            });
+        }
+
+        overlay.addEventListener('click', function () {
+            sidebar.classList.remove('show');
+            overlay.classList.remove('show');
+        });
+    </script>
+</body>
+
+</html>

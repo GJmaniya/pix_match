@@ -7,7 +7,7 @@ Flask
 Werkzeug
 google-auth
 google-auth-oauthlib
-google-auth-httplib20
+google-auth-httplib2
 requests
 phonenumbers
 geopy

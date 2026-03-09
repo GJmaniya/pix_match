@@ -1,0 +1,14 @@
+facenet-pytorch
+torch
+opencv-python
+numpy
+faiss-cpu
+Flask
+Werkzeug
+google-auth
+google-auth-oauthlib
+google-auth-httplib20
+requests
+phonenumbers
+geopy
+folium

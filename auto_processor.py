@@ -3,9 +3,10 @@ import os
 import sqlite3
 import threading
 from werkzeug.utils import secure_filename
-from PIL import Image, ImageOps
+from PIL import Image
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from watermarking import apply_watermark, get_watermark_logo_path, get_watermark_settings
 
 # You must have matcher initialized to run embeddings
 from matcher import FaceMatcher
@@ -17,7 +18,6 @@ print("Matcher Ready.")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOADS_DIR = os.path.join(BASE_DIR, 'static', 'uploads')
 DB_PATH = os.path.join(BASE_DIR, 'database.db')
-LOGO_PATH = os.path.join(BASE_DIR, 'static', 'images', 'MM LOGO.png')
 
 class PhotoUploadHandler(FileSystemEventHandler):
     def on_created(self, event):
@@ -51,7 +51,10 @@ class PhotoUploadHandler(FileSystemEventHandler):
             # 2. Get Event ID from Database
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
-            cursor.execute("SELECT id FROM events WHERE event_name = ?", (event_name,))
+            cursor.execute(
+                "SELECT id, user_id FROM events WHERE event_name = ?",
+                (event_name,),
+            )
             event_row = cursor.fetchone()
             
             if not event_row:
@@ -59,7 +62,21 @@ class PhotoUploadHandler(FileSystemEventHandler):
                 conn.close()
                 return
                 
-            event_id = event_row[0]
+            event_id, user_id = event_row
+            watermark_settings = get_watermark_settings(conn, user_id)
+            watermark_logo_path = get_watermark_logo_path(
+                watermark_settings,
+                os.path.join(BASE_DIR, 'static'),
+                key='logo_filename',
+            )
+            if (
+                watermark_settings['enabled']
+                and watermark_settings['logo_filename']
+                and not os.path.isfile(watermark_logo_path)
+            ):
+                print(f"[WATCHER] Configured watermark logo is missing for user {user_id}.")
+                conn.close()
+                return
             
             # Check if photo is already in database (maybe it was uploaded via website)
             db_rel_path = f"{event_name}/{filename}"
@@ -73,35 +90,21 @@ class PhotoUploadHandler(FileSystemEventHandler):
                 conn.close()
                 return
 
-            # 3. Apply Watermark
+            # 3. Apply the account's configured watermark.
             try:
-                img = Image.open(filepath)
-                img = ImageOps.exif_transpose(img)
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                
-                if os.path.exists(LOGO_PATH):
-                    logo = Image.open(LOGO_PATH)
-                    wm_width = int(img.width * 0.20)
-                    wm_ratio = wm_width / float(logo.width)
-                    wm_height = int(float(logo.height) * float(wm_ratio))
-                    logo = logo.resize((wm_width, wm_height), Image.Resampling.LANCZOS)
-                    
-                    padding = int(img.width * 0.02)
-                    position = (img.width - wm_width - padding, img.height - wm_height - padding)
-                    
-                    if img.mode != 'RGBA':
-                        temp_img = img.convert('RGBA')
-                        temp_img.paste(logo, position, logo)
-                        img = temp_img.convert('RGB')
-                    else:
-                        img.paste(logo, position, logo)
-                        
-                    # Save watermarked photo, overwriting original
-                    img.save(filepath, quality=90)
-                    print(f"[WATCHER] Watermark applied to {filename}.")
+                with Image.open(filepath) as original:
+                    img = apply_watermark(
+                        original,
+                        watermark_logo_path,
+                        watermark_settings,
+                    )
+                    if watermark_settings['enabled'] and os.path.isfile(watermark_logo_path):
+                        img.save(filepath, quality=90)
+                        print(f"[WATCHER] Configured watermark applied to {filename}.")
             except Exception as e:
                 print(f"[WATCHER] Failed to apply watermark to {filename}: {e}")
+                conn.close()
+                return
 
             # 4. Insert into Database
             sub_event_id = None

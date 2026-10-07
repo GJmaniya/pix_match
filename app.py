@@ -1,13 +1,19 @@
 import os
 import time
 import sqlite3
+import hashlib
 import json
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import google.oauth2.id_token
 # Allow HTTP for local development only (prevents "(insecure_transport) OAuth 2 MUST utilize https." error)
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
-
-from flask import Flask, render_template, request, redirect, url_for, session
+if os.environ.get('APP_ENV') != 'production':
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # HTTP allowed only for local testing
+    
+from flask import Flask, flash, render_template, request, redirect, url_for, session
 from werkzeug.utils import secure_filename
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport import requests as grequests
@@ -22,10 +28,27 @@ import concurrent.futures
 import io
 import zipfile
 import uuid
+import secrets
 from flask import send_from_directory
+from werkzeug.security import check_password_hash, generate_password_hash
+from watermarking import (
+    WATERMARK_POSITIONS,
+    apply_watermark,
+    ensure_watermark_settings_table,
+    get_watermark_settings,
+    get_watermark_logo_path,
+)
 
 app = Flask(__name__)
-app.secret_key = '123456'
+app.secret_key = os.environ.get('SECRET_KEY', 'change-this-long-random-string')
+ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', '')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '')
+ADMIN_PASSWORD_HASH = generate_password_hash(ADMIN_PASSWORD) if ADMIN_PASSWORD else ''
+ADMIN_ENABLED = bool(
+    ADMIN_USERNAME
+    and ADMIN_PASSWORD_HASH
+    and len(os.environ.get('SECRET_KEY', '')) >= 32
+)
 
 # Email Configuration for OTP
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
@@ -55,6 +78,10 @@ def generate_device_id(request):
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'database.db')
 CLIENT_SECRETS_FILE = os.path.join(os.path.dirname(__file__), 'client_secrets.json')
+GOOGLE_REDIRECT_URI = os.environ.get(
+    'GOOGLE_REDIRECT_URI',
+    'http://127.0.0.1:5000/oauth2callback',
+)
 SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile']
 
 # --- Configuration for File Uploads ---
@@ -71,60 +98,157 @@ def allowed_file(filename):
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def init_db():
-    """Create DB and tables if missing."""
+    """Create the application tables and add columns missing from older databases."""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            first_name TEXT,
-            last_name TEXT,
-            username TEXT UNIQUE,
-            email TEXT UNIQUE,
-            password TEXT
-        )
-    ''')
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS sub_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (event_id) REFERENCES events (id)
-        )
-    ''')
-    
-    # Check if sub_event_id exists in photos, and add it if not
-    try:
-        cur.execute("ALTER TABLE photos ADD COLUMN sub_event_id INTEGER REFERENCES sub_events(id)")
-    except sqlite3.OperationalError as e:
-        # Ignore error if column already exists
-        if "duplicate column name" not in str(e).lower():
-            pass
+    with conn:
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                first_name TEXT,
+                last_name TEXT,
+                username TEXT UNIQUE,
+                email TEXT UNIQUE,
+                password TEXT,
+                registered_at TIMESTAMP,
+                last_login_at TIMESTAMP,
+                is_locked INTEGER NOT NULL DEFAULT 0,
+                unlock_code_hash TEXT
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                event_name TEXT NOT NULL,
+                event_date TEXT,
+                venue TEXT,
+                category TEXT,
+                privacy TEXT,
+                cover_photo TEXT,
+                pin_code TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS photos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id INTEGER NOT NULL,
+                filename TEXT NOT NULL,
+                sub_event_id INTEGER,
+                FOREIGN KEY (event_id) REFERENCES events (id)
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS sub_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (event_id) REFERENCES events (id)
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS guest_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id INTEGER NOT NULL,
+                first_name TEXT,
+                last_name TEXT,
+                email TEXT,
+                phone TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (event_id) REFERENCES events (id)
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS otp_codes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id INTEGER NOT NULL,
+                contact TEXT NOT NULL,
+                otp_code TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                verified INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (event_id) REFERENCES events (id)
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS admin_unlock_codes (
+                code_fingerprint TEXT PRIMARY KEY,
+                generated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        ensure_watermark_settings_table(conn)
 
-    # Check if pin_code exists in events, and add it if not
-    try:
-        cur.execute("ALTER TABLE events ADD COLUMN pin_code TEXT")
-    except sqlite3.OperationalError as e:
-        if "duplicate column name" not in str(e).lower():
-            pass
-            
-    conn.commit()
+        migrations = {
+            'events': ('pin_code', 'TEXT'),
+            'photos': ('sub_event_id', 'INTEGER REFERENCES sub_events(id)'),
+            'guest_users': ('created_at', 'TIMESTAMP'),
+        }
+        for table, (column, definition) in migrations.items():
+            columns = {row[1] for row in cur.execute(f'PRAGMA table_info({table})')}
+            if column not in columns:
+                cur.execute(f'ALTER TABLE {table} ADD COLUMN {column} {definition}')
+                if table == 'guest_users' and column == 'created_at':
+                    cur.execute(
+                        'UPDATE guest_users SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL'
+                    )
+        user_columns = {row[1] for row in cur.execute('PRAGMA table_info(users)')}
+        user_migrations = {
+            'registered_at': 'TIMESTAMP',
+            'last_login_at': 'TIMESTAMP',
+            'is_locked': 'INTEGER NOT NULL DEFAULT 0',
+            'unlock_code_hash': 'TEXT',
+        }
+        for column, definition in user_migrations.items():
+            if column not in user_columns:
+                cur.execute(f'ALTER TABLE users ADD COLUMN {column} {definition}')
     conn.close()
 
 # ensure DB exists
 init_db()
+
+@app.before_request
+def reject_locked_user_sessions():
+    user_id = session.get('user_id')
+    if user_id is None:
+        return None
+
+    conn = sqlite3.connect(DB_PATH)
+    user = conn.execute(
+        'SELECT is_locked FROM users WHERE id = ?',
+        (user_id,),
+    ).fetchone()
+    conn.close()
+    if user is None:
+        session.clear()
+        return redirect(url_for('login'))
+    if user[0] and request.endpoint not in {'account_unlock', 'logout', 'static'}:
+        if request.endpoint and request.endpoint.startswith('api_'):
+            return jsonify({
+                'status': 'error',
+                'message': 'Account is locked. Enter the unlock code to continue.',
+            }), 423
+        return render_template(
+            'account_locked.html',
+            csrf_token=session.setdefault(
+                'account_unlock_csrf_token',
+                secrets.token_urlsafe(32),
+            ),
+            error=None,
+        ), 423
+    return None
 
 # --- Google OAuth routes ---
 @app.route('/login/google')
 def login_google():
     if not os.path.exists(CLIENT_SECRETS_FILE):
         return ("Google OAuth not configured. Place client_secrets.json in project root."), 500
-    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # only for local dev
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRETS_FILE,
         scopes=SCOPES,
-        redirect_uri=url_for('oauth2callback', _external=True)
+        autogenerate_code_verifier=False,
+        redirect_uri=GOOGLE_REDIRECT_URI
     )
     auth_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
     session['oauth_state'] = state
@@ -146,8 +270,9 @@ def oauth2callback():
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE,
             scopes=SCOPES,
+            autogenerate_code_verifier=False,
             state=state,
-            redirect_uri=url_for('oauth2callback', _external=True)
+            redirect_uri=GOOGLE_REDIRECT_URI
         )
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
@@ -183,13 +308,13 @@ def oauth2callback():
             userinfo = r.json()
 
         email = userinfo.get('email')
-        first_name = userinfo.get('given_name', '') or userinfo.get('name', '').split(' ')[0:1]
+        first_name = userinfo.get('given_name', '') or (userinfo.get('name', '').split(' ') or [''])[0]
         last_name = userinfo.get('family_name', '') or ''
 
         # upsert user
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
-        cur.execute("SELECT id, first_name FROM users WHERE email = ?", (email,))
+        cur.execute("SELECT id, first_name, is_locked FROM users WHERE email = ?", (email,))
         user = cur.fetchone()
         if not user:
             base_username = (email.split('@')[0] if email else 'user')
@@ -197,8 +322,12 @@ def oauth2callback():
             i = 1
             while True:
                 try:
-                    cur.execute('INSERT INTO users (first_name, last_name, username, email, password) VALUES (?, ?, ?, ?, ?)',
-                                (first_name, last_name, username, email, ''))
+                    cur.execute('''
+                        INSERT INTO users (
+                            first_name, last_name, username, email, password,
+                            registered_at, last_login_at
+                        ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ''', (first_name, last_name, username, email, ''))
                     conn.commit()
                     user_id = cur.lastrowid
                     break
@@ -208,8 +337,14 @@ def oauth2callback():
         else:
             user_id = user[0]
             first_name = user[1] or first_name
+            cur.execute(
+                'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?',
+                (user_id,),
+            )
+            conn.commit()
         conn.close()
 
+        session.clear()
         session['user_id'] = user_id
         session['first_name'] = first_name
         return redirect(url_for('dashboard' if 'dashboard' in app.view_functions else 'home'))
@@ -232,10 +367,14 @@ def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     user_id = session['user_id']
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('SELECT first_name, last_name, username FROM users WHERE id = ?', (user_id,))
     user_data = cursor.fetchone()
+    if user_data is None:
+        conn.close()
+        session.clear()
+        return redirect(url_for('login'))
     user_first_name = user_data[0]
     user_last_name = user_data[1]
     username = user_data[2]
@@ -243,6 +382,457 @@ def dashboard():
     events = cursor.fetchall()
     conn.close()
     return render_template('dashboard.html', user_first_name=user_first_name, user_last_name=user_last_name, username=username, events=events)
+
+
+@app.route('/watermark', methods=['GET', 'POST'])
+def watermark_settings():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    user_id = session['user_id']
+    conn = sqlite3.connect(DB_PATH)
+    settings = get_watermark_settings(conn, user_id)
+    csrf_token = session.setdefault('watermark_csrf_token', secrets.token_urlsafe(32))
+    error = None
+    saved = False
+    status_code = 200
+    new_logo_path = None
+
+    if request.method == 'POST':
+        if not secrets.compare_digest(
+            csrf_token,
+            request.form.get('csrf_token', ''),
+        ):
+            error = 'Your settings form expired. Refresh the page and try again.'
+            status_code = 400
+        else:
+            position = request.form.get('position', '')
+            try:
+                opacity = int(request.form.get('opacity', ''))
+                size = int(request.form.get('size', ''))
+            except ValueError:
+                opacity = -1
+                size = -1
+
+            if position not in WATERMARK_POSITIONS:
+                error = 'Choose one of the available watermark positions.'
+            elif not 10 <= opacity <= 100:
+                error = 'Watermark opacity must be between 10 and 100.'
+            elif not 5 <= size <= 50:
+                error = 'Watermark size must be between 5 and 50.'
+
+            uploaded_primary = request.files.get('logo_file')
+            primary_bytes = uploaded_primary.read(5 * 1024 * 1024 + 1) if uploaded_primary and uploaded_primary.filename else b''
+            if not error and len(primary_bytes) > 5 * 1024 * 1024:
+                error = 'The logo must be 5 MB or smaller.'
+
+            cleaned_primary = None
+            if not error and primary_bytes:
+                try:
+                    with Image.open(io.BytesIO(primary_bytes)) as uploaded_image:
+                        if uploaded_image.format not in {'PNG', 'JPEG', 'WEBP'}:
+                            raise ValueError('Unsupported image type')
+                        if uploaded_image.width * uploaded_image.height > 20_000_000:
+                            raise ValueError('Image dimensions are too large')
+                        uploaded_image.load()
+                        cleaned_primary = uploaded_image.convert('RGBA')
+                except (OSError, ValueError, Image.DecompressionBombError):
+                    error = 'Upload a valid PNG, JPG, or WEBP logo (20 megapixels or less).'
+
+            if not error:
+                remove_primary = (
+                    request.form.get('remove_logo') == '1'
+                    and cleaned_primary is None
+                )
+                old_primary_filename = settings.get('logo_filename')
+                old_secondary_filename = settings.get('secondary_logo_filename')
+                primary_filename = None if remove_primary else old_primary_filename
+
+                if cleaned_primary is not None:
+                    primary_filename = f'user_{user_id}_{uuid.uuid4().hex}.png'
+                    watermark_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'watermarks')
+                    os.makedirs(watermark_folder, exist_ok=True)
+                    new_logo_path = os.path.join(watermark_folder, primary_filename)
+                    cleaned_primary.save(new_logo_path, format='PNG', optimize=True)
+
+                # --- Secondary logo ---
+                uploaded_secondary = request.files.get('secondary_logo_file')
+                secondary_bytes = uploaded_secondary.read(5 * 1024 * 1024 + 1) if uploaded_secondary and uploaded_secondary.filename else b''
+                if not error and len(secondary_bytes) > 5 * 1024 * 1024:
+                    error = 'The secondary logo must be 5 MB or smaller.'
+
+                cleaned_secondary = None
+                if not error and secondary_bytes:
+                    try:
+                        with Image.open(io.BytesIO(secondary_bytes)) as uploaded_secondary_image:
+                            if uploaded_secondary_image.format not in {'PNG', 'JPEG', 'WEBP'}:
+                                raise ValueError('Unsupported image type')
+                            if uploaded_secondary_image.width * uploaded_secondary_image.height > 20_000_000:
+                                raise ValueError('Image dimensions are too large')
+                            uploaded_secondary_image.load()
+                            cleaned_secondary = uploaded_secondary_image.convert('RGBA')
+                    except (OSError, ValueError, Image.DecompressionBombError):
+                        error = 'Upload a valid PNG, JPG, or WEBP secondary logo (20 megapixels or less).'
+
+                new_secondary_logo_path = None
+                secondary_filename = old_secondary_filename
+                remove_secondary = (
+                    request.form.get('remove_secondary_logo') == '1'
+                    and cleaned_secondary is None
+                )
+                if remove_secondary:
+                    secondary_filename = None
+
+                if not error and cleaned_secondary is not None:
+                    secondary_filename = f'user_{user_id}_sec_{uuid.uuid4().hex}.png'
+                    watermark_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'watermarks')
+                    os.makedirs(watermark_folder, exist_ok=True)
+                    new_secondary_logo_path = os.path.join(watermark_folder, secondary_filename)
+                    cleaned_secondary.save(new_secondary_logo_path, format='PNG', optimize=True)
+
+                enabled = int(
+                    request.form.get('enabled') == '1'
+                    and not remove_primary
+                )
+                if enabled and not primary_filename:
+                    error = 'The primary watermark logo is required when watermarking is enabled.'
+
+                if not error:
+                    try:
+                        conn.execute(
+                            '''
+                            INSERT INTO watermark_settings
+                                (user_id, logo_filename, secondary_logo_filename, enabled, position, opacity, size)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(user_id) DO UPDATE SET
+                                logo_filename = excluded.logo_filename,
+                                secondary_logo_filename = excluded.secondary_logo_filename,
+                                enabled = excluded.enabled,
+                                position = excluded.position,
+                                opacity = excluded.opacity,
+                                size = excluded.size
+                            ''',
+                            (
+                                user_id,
+                                primary_filename,
+                                secondary_filename,
+                                enabled,
+                                position,
+                                opacity,
+                                size,
+                            ),
+                        )
+                        conn.commit()
+                        settings = get_watermark_settings(conn, user_id)
+                        saved = True
+                        for old_filename, new_filename, key in [
+                            (old_primary_filename, primary_filename, 'logo_filename'),
+                            (old_secondary_filename, secondary_filename, 'secondary_logo_filename'),
+                        ]:
+                            if old_filename and old_filename != new_filename:
+                                old_logo_path = get_watermark_logo_path(
+                                    {key: old_filename},
+                                    app.static_folder,
+                                    key=key,
+                                )
+                                try:
+                                    os.remove(old_logo_path)
+                                except FileNotFoundError:
+                                    pass
+                                except OSError:
+                                    app.logger.exception('Failed to remove the replaced watermark logo')
+                    except sqlite3.Error:
+                        conn.rollback()
+                        for file_path in [locals().get('new_logo_path'), locals().get('new_secondary_logo_path')]:
+                            if file_path:
+                                try:
+                                    os.remove(file_path)
+                                except OSError:
+                                    app.logger.exception('Failed to remove an uncommitted watermark logo')
+                        app.logger.exception('Failed to save watermark settings for user %s', user_id)
+                        error = 'Your watermark settings could not be saved. Please try again.'
+                        status_code = 500
+
+    conn.close()
+    logo_filename = settings.get('logo_filename')
+    logo_preview_url = (
+        url_for('static', filename=f'uploads/watermarks/{logo_filename}')
+        if logo_filename
+        else None
+    )
+    secondary_logo_filename = settings.get('secondary_logo_filename')
+    secondary_logo_preview_url = (
+        url_for('static', filename=f'uploads/watermarks/{secondary_logo_filename}')
+        if secondary_logo_filename
+        else None
+    )
+    return render_template(
+        'watermark.html',
+        user_first_name=session.get('first_name', ''),
+        settings=settings,
+        csrf_token=csrf_token,
+        logo_preview_url=logo_preview_url,
+        secondary_logo_preview_url=secondary_logo_preview_url,
+        error=error,
+        saved=saved,
+    ), status_code
+
+def _render_admin_accounts(unlock_code=None, error=None, notice=None):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, first_name, last_name, username, email,
+               registered_at, last_login_at, is_locked
+        FROM users
+        ORDER BY registered_at DESC, id DESC
+    ''')
+    users = cursor.fetchall()
+    conn.close()
+    return render_template(
+        'admin.html',
+        users=users,
+        user_count=len(users),
+        csrf_token=session.setdefault('admin_csrf_token', secrets.token_urlsafe(32)),
+        unlock_code=unlock_code,
+        error=error,
+        notice=notice,
+    )
+
+def _admin_csrf_valid():
+    expected = session.get('admin_csrf_token', '')
+    provided = request.form.get('csrf_token', '')
+    return bool(expected and secrets.compare_digest(expected, provided))
+
+def _generate_unique_unlock_code(conn):
+    while True:
+        code = ''.join(
+            secrets.choice('ABCDEFGHJKLMNPQRSTUVWXYZ23456789')
+            for _ in range(6)
+        )
+        fingerprint = hashlib.sha256(code.encode('utf-8')).hexdigest()
+        try:
+            conn.execute(
+                'INSERT INTO admin_unlock_codes (code_fingerprint) VALUES (?)',
+                (fingerprint,),
+            )
+            return code
+        except sqlite3.IntegrityError:
+            continue
+
+@app.route('/admin', methods=['GET', 'POST'])
+def admin_panel():
+    if not ADMIN_ENABLED:
+        return render_template(
+            'admin_login.html',
+            error='Admin login is not configured. Set ADMIN_USERNAME, ADMIN_PASSWORD, and a strong SECRET_KEY.',
+        ), 503
+
+    if not session.get('admin_authenticated'):
+        error = None
+        csrf_token = session.setdefault('admin_csrf_token', secrets.token_urlsafe(32))
+        if request.method == 'POST':
+            if not _admin_csrf_valid():
+                return render_template(
+                    'admin_login.html',
+                    error='Your login form expired. Please refresh and try again.',
+                    csrf_token=csrf_token,
+                ), 400
+            username = request.form.get('username', '')
+            password = request.form.get('password', '')
+            username_valid = secrets.compare_digest(username, ADMIN_USERNAME)
+            password_valid = check_password_hash(ADMIN_PASSWORD_HASH, password)
+            if username_valid and password_valid:
+                session.clear()
+                session['admin_authenticated'] = True
+                session['admin_csrf_token'] = secrets.token_urlsafe(32)
+                return redirect(url_for('admin_panel'))
+            error = 'Invalid username or password.'
+        return render_template('admin_login.html', error=error, csrf_token=csrf_token)
+
+    return _render_admin_accounts()
+
+@app.route('/admin/users/<int:user_id>/lock', methods=['POST'])
+def admin_lock_user(user_id):
+    if not session.get('admin_authenticated'):
+        return redirect(url_for('admin_panel'))
+    if not _admin_csrf_valid():
+        return 'Invalid or expired request token.', 400
+
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        'SELECT id FROM users WHERE id = ?',
+        (user_id,),
+    ).fetchone()
+    if row is None:
+        conn.close()
+        return 'Account not found.', 404
+
+    with conn:
+        unlock_code = _generate_unique_unlock_code(conn)
+        conn.execute(
+            'UPDATE users SET is_locked = 1, unlock_code_hash = ? WHERE id = ?',
+            (generate_password_hash(unlock_code), user_id),
+        )
+    conn.close()
+    return _render_admin_accounts(
+        unlock_code=unlock_code,
+        notice='Account locked. Share this one-time six-character code with the user. It will not be shown again.',
+    )
+
+@app.route('/admin/users/<int:user_id>/delete', methods=['POST'])
+def admin_delete_user(user_id):
+    if not session.get('admin_authenticated'):
+        return redirect(url_for('admin_panel'))
+    if not _admin_csrf_valid():
+        return 'Invalid or expired request token.', 400
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT id FROM users WHERE id = ?', (user_id,))
+    if cursor.fetchone() is None:
+        conn.close()
+        return 'Account not found.', 404
+
+    cursor.execute(
+        'SELECT photos.filename FROM photos '
+        'JOIN events ON events.id = photos.event_id '
+        'WHERE events.user_id = ?',
+        (user_id,),
+    )
+    files_to_check = set()
+    files_to_check.update(row[0] for row in cursor.fetchall() if row[0])
+    cursor.execute(
+        'SELECT cover_photo FROM events WHERE user_id = ?',
+        (user_id,),
+    )
+    files_to_check.update(row[0] for row in cursor.fetchall() if row[0])
+    cursor.execute('SELECT id FROM events WHERE user_id = ?', (user_id,))
+    event_ids = [row[0] for row in cursor.fetchall()]
+
+    with conn:
+        cursor.execute(
+            'DELETE FROM otp_codes WHERE event_id IN '
+            '(SELECT id FROM events WHERE user_id = ?)',
+            (user_id,),
+        )
+        cursor.execute(
+            'DELETE FROM guest_users WHERE event_id IN '
+            '(SELECT id FROM events WHERE user_id = ?)',
+            (user_id,),
+        )
+        cursor.execute(
+            'DELETE FROM photos WHERE event_id IN '
+            '(SELECT id FROM events WHERE user_id = ?)',
+            (user_id,),
+        )
+        cursor.execute(
+            'DELETE FROM sub_events WHERE event_id IN '
+            '(SELECT id FROM events WHERE user_id = ?)',
+            (user_id,),
+        )
+        cursor.execute('DELETE FROM events WHERE user_id = ?', (user_id,))
+        cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
+
+    remaining_files = set()
+    cursor.execute('SELECT filename FROM photos')
+    remaining_files.update(row[0] for row in cursor.fetchall() if row[0])
+    cursor.execute('SELECT cover_photo FROM events')
+    remaining_files.update(row[0] for row in cursor.fetchall() if row[0])
+    conn.close()
+
+    cleanup_failed = False
+    if event_ids and os.path.exists(THIRDUSER_DB):
+        visitors_conn = None
+        try:
+            visitors_conn = sqlite3.connect(THIRDUSER_DB)
+            visitors_table = visitors_conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'guest_visitors'"
+            ).fetchone()
+            if visitors_table:
+                with visitors_conn:
+                    for start in range(0, len(event_ids), 900):
+                        event_id_batch = event_ids[start:start + 900]
+                        placeholders = ','.join('?' for _ in event_id_batch)
+                        visitors_conn.execute(
+                            f'DELETE FROM guest_visitors WHERE event_id IN ({placeholders})',
+                            event_id_batch,
+                        )
+        except sqlite3.Error:
+            app.logger.exception('Unable to remove visitor records for deleted account %s.', user_id)
+            cleanup_failed = True
+        finally:
+            if visitors_conn is not None:
+                visitors_conn.close()
+
+    upload_root = os.path.realpath(app.config['UPLOAD_FOLDER'])
+    for relative_path in files_to_check - remaining_files:
+        file_path = os.path.realpath(os.path.join(upload_root, relative_path))
+        if os.path.commonpath((upload_root, file_path)) != upload_root:
+            app.logger.warning('Skipped unsafe account-owned upload path during deletion.')
+            cleanup_failed = True
+            continue
+        try:
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        except OSError:
+            app.logger.exception('Unable to remove account-owned upload: %s', file_path)
+            cleanup_failed = True
+
+    notice = 'Account and its event data were deleted.'
+    if cleanup_failed:
+        notice += ' Some related records or uploaded files could not be removed; check the server log.'
+    return _render_admin_accounts(notice=notice)
+
+@app.route('/account/unlock', methods=['POST'])
+def account_unlock():
+    user_id = session.get('user_id')
+    if user_id is None:
+        return redirect(url_for('login'))
+
+    expected = session.get('account_unlock_csrf_token', '')
+    provided = request.form.get('csrf_token', '')
+    if not expected or not secrets.compare_digest(expected, provided):
+        return 'Invalid or expired request token. Refresh the page and try again.', 400
+
+    unlock_code = request.form.get('unlock_code', '').strip().upper()
+    if len(unlock_code) != 6 or not unlock_code.isascii() or not unlock_code.isalnum():
+        return render_template(
+            'account_locked.html',
+            csrf_token=expected,
+            error='Enter the 6-character code provided by the administrator.',
+        ), 423
+
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        'SELECT is_locked, unlock_code_hash FROM users WHERE id = ?',
+        (user_id,),
+    ).fetchone()
+    if row is None:
+        conn.close()
+        session.clear()
+        return redirect(url_for('login'))
+    if not row[0] or not row[1] or not check_password_hash(row[1], unlock_code):
+        conn.close()
+        return render_template(
+            'account_locked.html',
+            csrf_token=expected,
+            error='That code is incorrect or expired. Please try again.',
+        ), 423
+
+    with conn:
+        conn.execute(
+            'UPDATE users SET is_locked = 0, unlock_code_hash = NULL WHERE id = ?',
+            (user_id,),
+        )
+    conn.close()
+    session.pop('account_unlock_csrf_token', None)
+    return redirect(url_for('dashboard'))
+
+@app.route('/admin/logout')
+def admin_logout():
+    session.pop('admin_authenticated', None)
+    return redirect(url_for('admin_panel'))
 
 @app.route('/logout')
 def logout():
@@ -256,15 +846,22 @@ def login():
     if request.method == 'POST':
         username_or_email = request.form['username_or_email']
         password = request.form['password']
-        conn = sqlite3.connect('database.db')
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE (username = ? OR email = ?) AND password = ?', 
+        cursor.execute('SELECT id, first_name, is_locked FROM users WHERE (username = ? OR email = ?) AND password = ? AND password != \'\'', 
                        (username_or_email, username_or_email, password))
         user = cursor.fetchone()
+        if user:
+            cursor.execute(
+                'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?',
+                (user[0],),
+            )
+            conn.commit()
         conn.close()
         if user:
+            session.clear()
             session['user_id'] = user[0]
-            session['first_name'] = user[1] 
+            session['first_name'] = user[1]
             return redirect(url_for('dashboard'))
         else:
             error = 'Invalid username or password. Please try again.'
@@ -278,15 +875,19 @@ def signup():
         username = request.form['username']
         email = request.form['email']
         password = request.form['password']
-        
-        conn = sqlite3.connect('database.db')
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute('INSERT INTO users (first_name, last_name, username, email, password) VALUES (?, ?, ?, ?, ?)', 
-                       (first_name, last_name, username, email, password))
+        cursor.execute('''
+            INSERT INTO users (
+                first_name, last_name, username, email, password,
+                registered_at, last_login_at
+            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ''', (first_name, last_name, username, email, password))
         conn.commit()
         user_id = cursor.lastrowid
         conn.close()
         
+        session.clear()
         session['user_id'] = user_id
         session['first_name'] = first_name
         return redirect(url_for('dashboard'))
@@ -523,14 +1124,31 @@ def upload_photos(event_id):
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
     
-    # Get event name for folder
-    cursor.execute("SELECT event_name FROM events WHERE id = ?", (event_id,))
+    # Check event ownership and load the account's watermark settings.
+    cursor.execute("SELECT event_name, user_id FROM events WHERE id = ?", (event_id,))
     event = cursor.fetchone()
-    if not event:
+    if not event or event[1] != session['user_id']:
         conn.close()
         return "Event not found", 404
     
     event_name = event[0]
+    watermark_settings = get_watermark_settings(conn, event[1])
+    watermark_logo_path = get_watermark_logo_path(
+        watermark_settings,
+        app.static_folder,
+        key='logo_filename',
+    )
+    if (
+        watermark_settings['enabled']
+        and watermark_settings['logo_filename']
+        and not os.path.isfile(primary_logo_path)
+    ):
+        conn.close()
+        app.logger.error(
+            'Configured watermark logo is missing for user %s',
+            event[1],
+        )
+        return "Configured watermark logo is missing. Update it in Watermark settings.", 500
     sub_event_id = request.form.get('sub_event_id')
     compress_quality = request.form.get('compress', '85')
     
@@ -549,43 +1167,7 @@ def upload_photos(event_id):
             # Load the main image
             img = Image.open(io.BytesIO(file_data))
             img = ImageOps.exif_transpose(img)
-            if img.mode in ('RGBA', 'P', 'LA'):
-                img = img.convert('RGB')
-            else:
-                # Ensure it has an alpha channel for watermarking if we are pasting a transparent PNG
-                # but we need the final to be RGB for JPEG saving. We will handle pasting gracefully.
-                pass
-                
-            # --- Apply Watermark ---
-            try:
-                logo_path = os.path.join(app.static_folder, 'images', 'MM LOGO.png')
-                if os.path.exists(logo_path):
-                    logo = Image.open(logo_path)
-                    
-                    # Calculate watermark size (e.g., 20% of the main image width)
-                    wm_width = int(img.width * 0.20)
-                    wm_ratio = wm_width / float(logo.width)
-                    wm_height = int(float(logo.height) * float(wm_ratio))
-                    
-                    # Resize logo
-                    logo = logo.resize((wm_width, wm_height), Image.Resampling.LANCZOS)
-                    
-                    # Calculate position (bottom right corner with padding)
-                    padding = int(img.width * 0.02) # 2% padding
-                    position = (img.width - wm_width - padding, img.height - wm_height - padding)
-                    
-                    # Paste the logo, using the logo itself as the mask for transparency
-                    # If the main image is not RGBA, we create a temporary RGBA canvas
-                    if img.mode != 'RGBA':
-                        temp_img = img.convert('RGBA')
-                        temp_img.paste(logo, position, logo)
-                        img = temp_img.convert('RGB')
-                    else:
-                        img.paste(logo, position, logo)
-                        
-            except Exception as e:
-                print(f"DEBUG: Failed to apply watermark to {filename}: {e}")
-            # -----------------------
+            img = apply_watermark(img, watermark_logo_path, watermark_settings)
 
             # Save the processed image
             if quality_str != '100':
@@ -597,11 +1179,8 @@ def upload_photos(event_id):
                 
             return filename, True
             
-        except Exception as e:
-            print(f"DEBUG: Processing/Compression failed for {filename}: {e}. Saving originally.")
-            # Fallback to saving original bytes
-            with open(save_path, 'wb') as f:
-                f.write(file_data)
+        except Exception:
+            app.logger.exception('Failed to process uploaded photo %s', filename)
             return filename, False
 
     # Extract valid files into memory so we can detach them from the Flask request context
@@ -615,14 +1194,23 @@ def upload_photos(event_id):
             
     # Process files concurrently
     processed_filenames = []
+    failed_filenames = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = [executor.submit(process_photo, *task) for task in tasks]
         for future in concurrent.futures.as_completed(futures):
             try:
-                fname, _ = future.result()
-                processed_filenames.append(fname)
+                fname, succeeded = future.result()
+                if succeeded:
+                    processed_filenames.append(fname)
+                else:
+                    failed_filenames.append(fname)
             except Exception as e:
-                print(f"DEBUG: Thread processing failed: {e}")
+                app.logger.exception('Photo processing thread failed: %s', e)
+    if failed_filenames:
+        flash(
+            f'{len(failed_filenames)} photo(s) could not be processed and were not saved.',
+            'error',
+        )
 
     # Batch insert into database
     for filename in processed_filenames:
@@ -843,8 +1431,8 @@ def guest_signup(event_id):
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO guest_users (event_id, email, phone)
-        VALUES (?, ?, ?)
+        INSERT INTO guest_users (event_id, email, phone, created_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
     ''', (event_id, email if email else None, phone if phone else None))
     conn.commit()
     conn.close()
@@ -1039,8 +1627,8 @@ def save_guest_info(event_id):
     else:
         # Insert new guest
         cursor.execute('''
-            INSERT INTO guest_users (event_id, first_name, last_name, email, phone)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO guest_users (event_id, first_name, last_name, email, phone, created_at)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ''', (event_id, first_name, last_name, final_email, final_phone))
     
     conn.commit()
@@ -1519,4 +2107,4 @@ def serve_source_photo(filename):
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    app.run(debug=True, port=int(os.environ.get('PORT', '5000')))

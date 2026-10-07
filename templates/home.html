@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PixMatch - Guests find their event photos with one selfie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='home.css') }}">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="p" viewBox="0 0 100 100"><circle cx="50" cy="32" r="17"/><path d="M12 100c0-26 16-40 38-40s38 14 38 40z"/></symbol></svg>
+
+<header class="site-header"><div class="wrap">
+  <a class="brand" href="{{ url_for('home') }}"><i></i>PixMatch</a>
+  <nav>
+    <a class="btn btn-ghost" href="{{ url_for('login') }}">Log in</a>
+    <a class="btn btn-solid" href="{{ url_for('signup') }}">Sign up</a>
+  </nav>
+</div></header>
+
+<main>
+<section class="wrap hero">
+  <div>
+    <h1>Every guest finds their photos with one selfie</h1>
+    <p class="lead">Upload your event gallery once. Guests take a selfie, and PixMatch shows only the photos they appear in.</p>
+    <div class="cta">
+      <a class="btn btn-solid btn-big" href="{{ url_for('signup') }}">Create your first event</a>
+      <a class="btn btn-ghost btn-big hide-sm" href="{{ url_for('login') }}">Log in</a>
+    </div>
+    <p class="fine">Free to try. Albums stay private until you share them.</p>
+  </div>
+  <div class="sheet" role="img" aria-label="A gallery of event photos where three photos of the same guest are highlighted">
+<div class="tile dim" style="--h:200"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p"/></svg></div>
+<div class="tile match" style="--h:28;--n:0"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p"/></svg></div>
+<div class="tile dim" style="--h:160"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p"/></svg></div>
+<div class="tile dim" style="--h:330"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p"/></svg></div>
+<div class="tile dim" style="--h:48"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p"/></svg></div>
+<div class="tile match" style="--h:215;--n:1"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p"/></svg></div>
+<div class="tile dim" style="--h:20"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p"/></svg></div>
+<div class="tile dim" style="--h:175"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p"/></svg></div>
+<div class="tile dim" style="--h:300"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p"/></svg></div>
+<div class="tile dim" style="--h:60"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p"/></svg></div>
+<div class="tile match" style="--h:190;--n:2"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p"/></svg></div>
+<div class="tile dim" style="--h:10"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p"/></svg></div>
+    <p class="sheet-note">3 of 12 photos match this selfie</p>
+  </div>
+</section>
+
+<section class="wrap features">
+  <div><svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="20" r="9"/><path d="M8 42c2-10 8-14 16-14s14 4 16 14M6 12V6h6M42 12V6h-6M6 28v6h6M42 28v6h-6"/></svg><h3>Accurate face matching</h3><p>Matches stay reliable across angles, lighting and crowded group shots, at 99.3% accuracy.</p></div>
+  <div><svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><rect x="10" y="22" width="28" height="20" rx="5"/><path d="M16 22v-6a8 8 0 0116 0v6"/><circle cx="24" cy="32" r="2.5"/></svg><h3>Privacy first</h3><p>You decide who can open each album. Guests only see photos of themselves.</p></div>
+  <div><svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="12" width="36" height="26" rx="5"/><circle cx="24" cy="25" r="7"/><path d="M24 21v8M21 23h5a2 2 0 010 4h-4"/></svg><h3>Earn from your gallery</h3><p>Add watermarks and let guests pay for the photos they want to keep.</p></div>
+</section>
+
+<section class="steps"><div class="wrap">
+  <div class="steps-top"><h2>From upload to guest download in four steps</h2><img src="{{ url_for('static', filename='images/singin.svg') }}" alt="A guest selfie on a phone matched with event photos" width="420" height="320"></div>
+  <ol>
+    <li><b>Create an event</b><span>Name it and set who can view.</span></li>
+    <li><b>Upload photos</b><span>Add the whole gallery in one go.</span></li>
+    <li><b>Share the link</b><span>Send it to guests or show a QR code.</span></li>
+    <li><b>Guests take a selfie</b><span>They see and save their own photos.</span></li>
+  </ol>
+</div></section>
+
+<section class="wrap closing">
+  <h2>Ready to share your next event?</h2>
+  <a class="btn btn-solid btn-big" href="{{ url_for('signup') }}">Sign up free</a>
+</section>
+</main>
+
+<footer><div class="wrap">PixMatch. Share event photos using face recognition.</div></footer>
+</body>
+</html>

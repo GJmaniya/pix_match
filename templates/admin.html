@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin panel - PixMatch</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body>
+    <main class="admin-page">
+        <header class="page-header">
+            <div>
+                <p class="eyebrow">PIXMatch / ADMINISTRATION</p>
+                <h1>Account overview</h1>
+                <p class="intro">Review account sign-ups and the most recent sign-in activity.</p>
+            </div>
+            <nav aria-label="Admin navigation">
+                <a class="nav-link sign-out" href="{{ url_for('admin_logout') }}">Sign out</a>
+            </nav>
+        </header>
+
+        <section class="summary-card" aria-label="Account summary">
+            <span class="summary-label">Total accounts</span>
+            <strong class="summary-number">{{ user_count }}</strong>
+        </section>
+
+        <section class="accounts-card" aria-labelledby="accounts-heading">
+            {% if error %}
+            <p class="admin-notice error-notice" role="alert">{{ error }}</p>
+            {% endif %}
+            {% if notice %}
+            <p class="admin-notice success-notice" role="status">{{ notice }}</p>
+            {% endif %}
+            {% if unlock_code %}
+            <section class="unlock-code-card" aria-labelledby="unlock-code-heading">
+                <div>
+                    <h2 id="unlock-code-heading">One-time unlock code</h2>
+                    <p>Share this six-character code with the user. It is shown once; generating another replaces it.</p>
+                </div>
+                <code>{{ unlock_code }}</code>
+            </section>
+            {% endif %}
+            <div class="table-heading">
+                <div>
+                    <h2 id="accounts-heading">Registered accounts</h2>
+                    <p>Passwords are never shown in this panel.</p>
+                </div>
+                <span class="account-count">{{ user_count }} total</span>
+            </div>
+
+            {% if users %}
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Account ID</th>
+                            <th scope="col">Name</th>
+                            <th scope="col">Username</th>
+                            <th scope="col">Email address</th>
+                            <th scope="col">Signed up (UTC)</th>
+                            <th scope="col">Last login (UTC)</th>
+                            <th scope="col">Account lock</th>
+                            <th scope="col">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                        <tr>
+                            <td>#{{ user['id'] }}</td>
+                            <td class="person-name">
+                                {% if user['first_name'] or user['last_name'] %}
+                                    {{ user['first_name'] or '' }} {{ user['last_name'] or '' }}
+                                {% else %}
+                                    <span class="muted">Name not provided</span>
+                                {% endif %}
+                            </td>
+                            <td>{% if user['username'] %}@{{ user['username'] }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                            <td>{% if user['email'] %}{{ user['email'] }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                            <td>{% if user['registered_at'] %}{{ user['registered_at'] }}{% else %}<span class="muted">Not recorded</span>{% endif %}</td>
+                            <td>{% if user['last_login_at'] %}{{ user['last_login_at'] }}{% else %}<span class="muted">Not recorded</span>{% endif %}</td>
+                            <td class="lock-actions">
+                                {% if user['is_locked'] %}
+                                <span class="account-status locked-status">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
+                                    Locked
+                                </span>
+                                <form method="post" action="{{ url_for('admin_lock_user', user_id=user['id']) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <button class="icon-button regenerate-button" type="submit" title="Generate a different unlock code" aria-label="Generate a different unlock code for @{{ user['username'] }}">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"></path></svg>
+                                        New code
+                                    </button>
+                                </form>
+                                {% else %}
+                                <span class="account-status active-status">Active</span>
+                                <form method="post" action="{{ url_for('admin_lock_user', user_id=user['id']) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <button class="icon-button lock-button" type="submit" title="Lock account and generate an unlock code" aria-label="Lock @{{ user['username'] }} and generate an unlock code">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"></path></svg>
+                                        Lock
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <form method="post" action="{{ url_for('admin_delete_user', user_id=user['id']) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <button class="delete-account-button" type="submit"
+                                        title="Permanently delete this account and its events"
+                                        aria-label="Permanently delete account @{{ user['username'] }}">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                                            <path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 4v6m6-6v6"></path>
+                                        </svg>
+                                        Delete
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="empty-state">No accounts have signed up yet.</p>
+            {% endif %}
+            <p class="history-note">Dates are recorded in UTC. Sign-up and login dates are tracked from now on; dates for existing accounts are not available.</p>
+        </section>
+    </main>
+</body>
+</html>

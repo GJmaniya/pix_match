@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watermark Settings - PixMatch</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='watermark.css') }}">
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <div class="logo">
+                    <a href="{{ url_for('dashboard') }}" aria-label="PixMatch home">
+                        <img src="{{ url_for('static', filename='images/pixmatch-logo.svg') }}" alt="PixMatch Logo">
+                    </a>
+                </div>
+                <nav class="sidebar-nav" aria-label="Main navigation">
+                    <ul>
+                        <li><a href="#" aria-label="Collapse navigation"><svg width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="M3 12H21M3 6H21M3 18H15" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" />
+                                </svg> Collapse</a></li>
+                        <li><a href="{{ url_for('dashboard') }}"><svg width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" aria-hidden="true">
+                                    <path d="M19 4H5C3.9 4 3 4.9 3 6V20C3 21.1 3.9 22 5 22H19C20.1 22 21 21.1 21 20V6C21 4.9 20.1 4 19 4Z"
+                                        stroke="currentColor" stroke-width="2" />
+                                    <path d="M16 2V6M8 2V6M3 10H21" stroke="currentColor" stroke-width="2" />
+                                </svg> My Events</a></li>
+                        <li><a href="{{ url_for('dashboard') }}"><svg width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" aria-hidden="true">
+                                    <path d="M3 9L12 2L21 9V20C21 21.1 20.1 22 19 22H5C3.9 22 3 21.1 3 20V9Z"
+                                        stroke="currentColor" stroke-width="2" />
+                                    <path d="M9 22V12H15V22" stroke="currentColor" stroke-width="2" />
+                                </svg> Event Home</a></li>
+                        <li class="active"><a href="{{ url_for('watermark_settings') }}" aria-current="page">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="M12 3l2.4 5.1 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8L12 3Z"
+                                        stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                                </svg> Watermark</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
+
+        <main class="main-content watermark-main">
+            <header class="main-header">
+                <div class="header-left">
+                    <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Toggle navigation">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M3 12H21M3 6H21M3 18H21" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" />
+                        </svg>
+                    </button>
+                    <h2>Watermark</h2>
+                </div>
+                <a class="watermark-back-link" href="{{ url_for('dashboard') }}">Back to My Events</a>
+            </header>
+
+            <section class="watermark-intro">
+                <p class="watermark-eyebrow">YOUR BRAND, ON EVERY EVENT</p>
+                <h1>Customize your watermark</h1>
+                <p>Upload up to two logos and choose how they appear on photos uploaded from now on.</p>
+            </section>
+
+            {% if error %}
+            <p class="watermark-message watermark-error" role="alert">{{ error }}</p>
+            {% elif saved %}
+            <p class="watermark-message watermark-success" role="status">Your watermark settings have been saved.</p>
+            {% endif %}
+
+            <div class="watermark-layout">
+                <form class="watermark-card watermark-form" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+                    <!-- ── Brand Logos Section ── -->
+                    <section class="watermark-form-section">
+                        <h2>Brand logos</h2>
+                        <p class="watermark-help">Upload up to two logos as watermarks. PNG, JPG, and WEBP up to 5 MB each.</p>
+
+                        <div class="watermark-logos-grid">
+
+                            <!-- Primary Logo Slot -->
+                            <div class="watermark-logo-slot" id="slot-primary">
+                                <span class="watermark-slot-badge">Logo 1</span>
+                                <label class="watermark-upload" for="logo-file">
+                                    <span class="watermark-upload-icon" aria-hidden="true">+</span>
+                                    <span id="upload-label">{{ 'Replace logo' if settings.logo_filename else 'Choose a logo' }}</span>
+                                    <input id="logo-file" name="logo_file" type="file" accept="image/png,image/jpeg,image/webp">
+                                </label>
+                                <input type="hidden" name="remove_logo" id="remove-logo-field" value="0">
+                                <button type="button"
+                                    class="watermark-remove-btn{% if not settings.logo_filename %} watermark-remove-btn--hidden{% endif %}"
+                                    id="remove-primary-btn"
+                                    data-clear-target="logo-file"
+                                    data-remove-field="remove-logo-field"
+                                    data-label-target="upload-label"
+                                    data-label-default="Choose a logo"
+                                    data-preview-target="watermark-preview-logo"
+                                    data-placeholder-target="watermark-preview-placeholder">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    Remove Logo 1
+                                </button>
+                            </div>
+
+                            <!-- Secondary Logo Slot -->
+                            <div class="watermark-logo-slot" id="slot-secondary">
+                                <span class="watermark-slot-badge watermark-slot-badge--secondary">Logo 2</span>
+                                <label class="watermark-upload" for="secondary-logo-file">
+                                    <span class="watermark-upload-icon" aria-hidden="true">+</span>
+                                    <span id="upload-label-secondary">{{ 'Replace logo' if settings.secondary_logo_filename else 'Choose a logo' }}</span>
+                                    <input id="secondary-logo-file" name="secondary_logo_file" type="file" accept="image/png,image/jpeg,image/webp">
+                                </label>
+                                <input type="hidden" name="remove_secondary_logo" id="remove-secondary-logo-field" value="0">
+                                <button type="button"
+                                    class="watermark-remove-btn{% if not settings.secondary_logo_filename %} watermark-remove-btn--hidden{% endif %}"
+                                    id="remove-secondary-btn"
+                                    data-clear-target="secondary-logo-file"
+                                    data-remove-field="remove-secondary-logo-field"
+                                    data-label-target="upload-label-secondary"
+                                    data-label-default="Choose a logo"
+                                    data-preview-target="watermark-preview-logo-secondary"
+                                    data-placeholder-target="">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    Remove Logo 2
+                                </button>
+                            </div>
+
+                        </div><!-- /.watermark-logos-grid -->
+                    </section>
+
+                    <!-- ── Watermark Options Section ── -->
+                    <section class="watermark-form-section">
+                        <div class="watermark-section-heading">
+                            <div>
+                                <h2>Watermark options</h2>
+                                <p class="watermark-help">Changes apply to newly uploaded photos.</p>
+                            </div>
+                            <label class="watermark-switch" for="watermark-enabled">
+                                <input id="watermark-enabled" name="enabled" value="1" type="checkbox"
+                                    {% if settings.enabled %}checked{% endif %}>
+                                <span aria-hidden="true"></span>
+                                <span class="visually-hidden">Enable watermark</span>
+                            </label>
+                        </div>
+
+                        <label class="watermark-field">
+                            <span>Position</span>
+                            <select id="watermark-position" name="position">
+                                <option value="top-left" {% if settings.position == 'top-left' %}selected{% endif %}>Top left</option>
+                                <option value="top-right" {% if settings.position == 'top-right' %}selected{% endif %}>Top right</option>
+                                <option value="bottom-left" {% if settings.position == 'bottom-left' %}selected{% endif %}>Bottom left</option>
+                                <option value="bottom-right" {% if settings.position == 'bottom-right' %}selected{% endif %}>Bottom right</option>
+                            </select>
+                        </label>
+
+                        <label class="watermark-field">
+                            <span class="watermark-range-heading">
+                                <span>Visibility</span>
+                                <output id="opacity-value" for="watermark-opacity">{{ settings.opacity }}%</output>
+                            </span>
+                            <input id="watermark-opacity" name="opacity" type="range" min="10" max="100"
+                                value="{{ settings.opacity }}">
+                            <span class="watermark-help">Controls how transparent the logo appears.</span>
+                        </label>
+
+                        <label class="watermark-field">
+                            <span class="watermark-range-heading">
+                                <span>Size</span>
+                                <output id="size-value" for="watermark-size">{{ settings.size }}%</output>
+                            </span>
+                            <input id="watermark-size" name="size" type="range" min="5" max="50"
+                                value="{{ settings.size }}">
+                            <span class="watermark-help">Logo width relative to the photo width.</span>
+                        </label>
+                    </section>
+
+                    <button class="watermark-save" type="submit">Save watermark settings</button>
+                </form>
+
+                <aside class="watermark-card watermark-preview-panel">
+                    <h2>Live preview</h2>
+                    <p class="watermark-help">Preview your logo placement and appearance.</p>
+                    <div class="watermark-preview-photo" id="watermark-preview">
+                        <span class="watermark-preview-sun" aria-hidden="true"></span>
+                        <span class="watermark-preview-hill watermark-preview-hill-back" aria-hidden="true"></span>
+                        <span class="watermark-preview-hill watermark-preview-hill-front" aria-hidden="true"></span>
+
+                        {% if logo_preview_url %}
+                        <img class="watermark-preview-logo" id="watermark-preview-logo"
+                            src="{{ logo_preview_url }}" alt="Watermark logo 1 preview">
+                        {% else %}
+                        <span class="watermark-preview-placeholder" id="watermark-preview-placeholder">Your logo preview</span>
+                        <img class="watermark-preview-logo" id="watermark-preview-logo" alt="Watermark logo 1 preview" hidden>
+                        {% endif %}
+
+                        {% if secondary_logo_preview_url %}
+                        <img class="watermark-preview-logo watermark-preview-logo--secondary" id="watermark-preview-logo-secondary"
+                            src="{{ secondary_logo_preview_url }}" alt="Watermark logo 2 preview">
+                        {% else %}
+                        <img class="watermark-preview-logo watermark-preview-logo--secondary" id="watermark-preview-logo-secondary"
+                            alt="Watermark logo 2 preview" hidden>
+                        {% endif %}
+                    </div>
+                    <p class="watermark-preview-caption">Settings are saved to your account and used across all your events.</p>
+                </aside>
+            </div>
+        </main>
+    </div>
+    <script src="{{ url_for('static', filename='watermark.js') }}" defer></script>
+</body>
+
+</html>

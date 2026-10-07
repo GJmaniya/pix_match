@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Access - {{ event.event_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='auth_modal.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+
+        .auth-overlay {
+            position: fixed;
+            animation: none;
+        }
+
+        .auth-background {
+            filter: blur(15px);
+            opacity: 0.4;
+        }
+    </style>
+
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+</head>
+
+<body>
+    <div class="auth-overlay">
+        <!-- Background with event cover -->
+        <div class="auth-background"
+            style="background-image: url('{{ url_for('static', filename='uploads/' + (event.cover_photo if event.cover_photo else 'default-cover.jpg')) }}');">
+        </div>
+
+        <div class="auth-container">
+            <!-- Left Side - Event Details with Cover Photo Background -->
+            <div class="auth-left"
+                style="background-image: url('{{ url_for('static', filename='uploads/' + (event.cover_photo if event.cover_photo else 'default-cover.jpg')) }}');">
+                <div class="event-card">
+                    <div class="event-logo">
+                        <img src="{{ url_for('static', filename='uploads/' + (event.cover_photo if event.cover_photo else 'default-cover.jpg')) }}"
+                            alt="Event">
+                    </div>
+                    <div class="event-info">
+                        <h1 class="event-date">{{ event.event_date if event.event_date else 'Event Date' }}</h1>
+                        <h2 class="event-title">{{ event.event_name }}</h2>
+                        <p class="event-subtitle">Photo Gallery</p>
+                    </div>
+                    <div class="event-badge">Public Group</div>
+                </div>
+            </div>
+
+            <!-- Right Side - Authentication Forms -->
+            <div class="auth-right">
+                <!-- Direct User Information Form -->
+                <div id="userInfoStep" class="auth-step">
+                    <h2>Guest Details</h2>
+                    <p class="auth-subtitle">Enter your details to view photos</p>
+
+                    <div class="auth-form">
+                        <input type="text" id="firstNameInput" placeholder="First Name" autocomplete="given-name"
+                            required>
+                        <input type="text" id="lastNameInput" placeholder="Last Name" autocomplete="family-name"
+                            required>
+                        <input type="email" id="emailInput" placeholder="Email Address" autocomplete="email" required>
+                        <input type="tel" id="phoneInput" placeholder="Phone Number (Optional)" autocomplete="tel">
+                    </div>
+
+                    <button class="auth-btn" id="submitUserInfoBtn">
+                        <span class="btn-text">Access Photos</span>
+                        <span class="btn-loader" style="display: none;">⏳</span>
+                    </button>
+
+                    <p class="auth-footer">
+                        By continuing you agree with our <a href="#">Terms of Service</a> and <a href="#">Privacy
+                            Policy</a>
+                    </p>
+
+                    <p class="auth-error" id="userInfoError" style="display: none;"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const eventId = {{ event_id }};
+
+        function showError(element, message) {
+            element.textContent = message;
+            element.style.display = 'block';
+        }
+
+        function setLoading(button, isLoading) {
+            const text = button.querySelector('.btn-text');
+            const loader = button.querySelector('.btn-loader');
+            if (isLoading) {
+                text.style.display = 'none';
+                loader.style.display = 'inline';
+                button.disabled = true;
+            } else {
+                text.style.display = 'inline';
+                loader.style.display = 'none';
+                button.disabled = false;
+            }
+        }
+
+        const firstNameInput = document.getElementById('firstNameInput');
+        const lastNameInput = document.getElementById('lastNameInput');
+        const emailInput = document.getElementById('emailInput');
+        const phoneInput = document.getElementById('phoneInput');
+        const submitUserInfoBtn = document.getElementById('submitUserInfoBtn');
+        const userInfoError = document.getElementById('userInfoError');
+
+        // Submit user info
+        submitUserInfoBtn.addEventListener('click', async function () {
+            const firstName = firstNameInput.value.trim();
+            const lastName = lastNameInput.value.trim();
+            const email = emailInput.value.trim();
+            const phone = phoneInput.value.trim();
+
+            if (!firstName || !lastName || !email) {
+                showError(userInfoError, '⚠️ First Name, Last Name, and Email are required.');
+                return;
+            }
+
+            setLoading(submitUserInfoBtn, true);
+            userInfoError.style.display = 'none';
+
+            try {
+                const response = await fetch(`/save_guest_info/${eventId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        first_name: firstName,
+                        last_name: lastName,
+                        email: email,
+                        phone: phone,
+                        contact: email // treating email as main contact for backward compatibility
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Redirect to photos
+                    window.location.reload();
+                } else {
+                    showError(userInfoError, '❌ ' + (data.error || 'Failed to save information'));
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError(userInfoError, '❌ An error occurred. Please try again.');
+            } finally {
+                setLoading(submitUserInfoBtn, false);
+            }
+        });
+    </script>
+</body>
+
+</html>

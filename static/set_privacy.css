@@ -1,0 +1,89 @@
+.privacy-options {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.privacy-option {
+    display: block;
+    cursor: pointer;
+    position: relative;
+}
+
+.privacy-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.option-content {
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    border: 1px solid #EAECF0;
+    border-radius: 12px;
+    transition: all 0.2s ease;
+    background-color: #FFFFFF;
+}
+
+.privacy-option input:checked+.option-content {
+    border-color: #344054;
+    background-color: #F9FAFB;
+    box-shadow: 0 0 0 4px #F2F4F7;
+}
+
+.radio-custom {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #D0D5DD;
+    border-radius: 50%;
+    margin-bottom: 12px;
+    position: relative;
+}
+
+.privacy-option input:checked+.option-content .radio-custom {
+    border-color: #344054;
+    background-color: #344054;
+}
+
+.privacy-option input:checked+.option-content .radio-custom::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    background-color: #FFFFFF;
+    border-radius: 50%;
+}
+
+.option-content h4 {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    font-weight: 500;
+    color: #101828;
+}
+
+.option-content p {
+    margin: 0;
+    font-size: 14px;
+    color: #667085;
+    line-height: 1.5;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .option-content {
+        padding: 16px;
+    }
+
+    .form-header-mobile {
+        margin-bottom: 16px;
+    }
+
+    .sidebar-toggle {
+        display: block !important;
+    }
+}

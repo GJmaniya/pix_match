@@ -1,0 +1,75 @@
+/* PixMatch theme: loads after each page's own CSS and restyles every page */
+:root{--lagoon:#0E4A52;--lagoon-2:#0a363c;--ink:#10262A;--mist:#EEF4F4;--paper:#fff;--saffron:#F5B02E;--line:#d3e0e0;--muted:#4d6665;--r:12px}
+body,body input,body button,body select,body textarea{font-family:'DM Sans',system-ui,sans-serif}
+h1,h2,h3,.form-title,.event-title,.logo-text{font-family:'Bricolage Grotesque','DM Sans',sans-serif;letter-spacing:-.02em}
+body{background:var(--mist);color:var(--ink)}
+:focus-visible{outline:3px solid var(--saffron);outline-offset:2px}
+
+/* buttons */
+body .btn-primary,body .upload-btn,body .upload-button,body .upload-button-header,body .login-button,body .submit-btn,body .auth-btn,body .url-btn{background:var(--lagoon);background-image:none;color:#fff;border:2px solid var(--lagoon);border-radius:999px;font-weight:600;box-shadow:none}
+body .btn-primary:hover,body .upload-btn:hover,body .upload-button:hover,body .upload-button-header:hover,body .login-button:hover,body .submit-btn:hover,body .auth-btn:hover,body .url-btn:hover{background:var(--lagoon-2);background-image:none;color:#fff;border-color:var(--lagoon-2);transform:none}
+body .btn-secondary,body .google-signin,body .google-btn{background:#fff;color:var(--lagoon);border:2px solid var(--line);border-radius:999px;font-weight:600}
+body .btn-secondary:hover,body .google-signin:hover,body .google-btn:hover{border-color:var(--lagoon);background:#fff}
+body .btn-danger,body .delete-all-btn{border-radius:999px}
+
+/* forms */
+body input[type=text],body input[type=email],body input[type=password],body input[type=tel],body input[type=date],body input[type=number],body select,body textarea,body .form-control{border:2px solid var(--line);border-radius:var(--r);background:#fff;color:var(--ink)}
+body input:focus,body select:focus,body textarea:focus,body .form-control:focus,body .otp-box:focus{border-color:var(--lagoon);box-shadow:0 0 0 4px rgba(245,176,46,.35);outline:none}
+body label{color:var(--ink);font-weight:600}
+
+/* sidebar shell (dashboard, albums, find photos, visitors, create event) */
+body .sidebar{background:var(--lagoon);border-right:0;color:#e4f1f1}
+body .sidebar .logo,body .sidebar .logo-text,body .sidebar-logo{color:#fff}
+body .sidebar-nav li a,body .nav-link{color:#cfe5e5;border-radius:10px}
+body .sidebar-nav li a:hover,body .nav-link:hover{background:rgba(255,255,255,.1);color:#fff}
+body .sidebar-nav li.active a,body .nav-link.active{background:var(--saffron);color:var(--ink)}
+body .sidebar-nav svg{stroke:currentColor}
+body .main-content{background:var(--mist)}
+body .main-header,body .content-header,body .page-header{background:transparent;border:0}
+body .main-header h1,body .content-header h1,body .page-header h1,body .form-header h1{font-size:2rem;color:var(--lagoon)}
+body .back-link{color:var(--lagoon);font-weight:600}
+body .right-panel>.back-link,body .form-panel>.back-link{align-self:flex-start;text-decoration:none;margin-bottom:12px}
+body .right-panel>.back-link:hover,body .form-panel>.back-link:hover{text-decoration:underline}
+
+/* cards */
+body .event-card,body .album-card,body .photo-card,body .form-container,body .table-container,body .selfie-prompt-card,body .empty-state{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:none}
+body .event-card:hover,body .album-card:hover,body .photo-card:hover{border-color:var(--lagoon);box-shadow:0 14px 30px -20px rgba(14,74,82,.6);transform:none}
+body .card-image-placeholder,body .event-initial{background:var(--lagoon);color:var(--saffron)}
+body .badge,body .event-badge{background:rgba(245,176,46,.25);color:var(--lagoon);border-radius:999px;font-weight:600}
+body .empty-state{border-style:dashed}
+body table th{background:var(--mist);color:var(--lagoon)}
+
+/* tabs */
+body .tab-item,body .tab{color:var(--muted);font-weight:600}
+body .tab-item.active,body .tab.active{color:var(--lagoon);border-bottom:3px solid var(--saffron);background:transparent}
+body .tab-count{background:var(--saffron);color:var(--ink)}
+
+/* login + signup split pages */
+body .left-panel,body .info-panel{background:var(--lagoon);color:#e4f1f1;border:0}
+body .left-panel h1,body .info-panel h1,body .left-panel .logo span{color:#fff}
+body .left-panel p,body .info-panel p{color:#cfe5e5}
+body .login-container,body .container{border-radius:24px;box-shadow:0 30px 60px -30px rgba(14,74,82,.6)}
+body .right-panel,body .form-panel{background:#fff}
+body .form-title,body .form-panel h1{color:var(--lagoon)}
+body .background-gradient{background:var(--mist)}
+
+/* OTP / PIN / guest sign-in modal */
+body .auth-overlay{background:rgba(16,38,42,.72)}
+body .auth-container{border-radius:24px;animation:none}
+body .auth-left{background-color:var(--lagoon)}
+body .auth-right{background:#fff}
+body .auth-step h2{color:var(--lagoon)}
+body .otp-box{border:2px solid var(--line);border-radius:var(--r)}
+body .auth-links a,body .auth-footer a{color:var(--lagoon);font-weight:600}
+body .auth-error{background:#fdecea;color:#9b2c1f;border-radius:var(--r)}
+body .auth-success{background:#e6f4ea;color:#1d6b3a;border-radius:var(--r)}
+
+/* guest share page */
+body .app-container .sidebar{border-radius:24px}
+body .upload-btn,body .user-btn{border-radius:999px}
+body .photo-overlay,body .photo-actions{border-radius:12px}
+body .action-button{background:#fff;color:var(--lagoon)}
+body .floating-favorites-btn{background:var(--saffron);color:var(--ink)}
+body .favorites-sidebar{border-left:1px solid var(--line)}
+@media(max-width:860px){body .sidebar{border-radius:0}}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}

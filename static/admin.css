@@ -1,0 +1,680 @@
+:root {
+    color-scheme: light;
+    font-family: Inter, "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #101828;
+    background: #f7f8fa;
+    font-synthesis: none;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    background: #f7f8fa;
+}
+
+.admin-page {
+    width: min(1160px, calc(100% - 48px));
+    margin: 0 auto;
+    padding: 52px 0;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+.eyebrow {
+    margin: 0 0 12px;
+    color: #667085;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+}
+
+h1,
+h2,
+p {
+    margin-top: 0;
+}
+
+h1 {
+    margin-bottom: 8px;
+    font-size: clamp(28px, 4vw, 36px);
+    letter-spacing: -0.04em;
+}
+
+.intro {
+    margin-bottom: 0;
+    color: #667085;
+    font-size: 15px;
+}
+
+.page-header nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.nav-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 42px;
+    padding: 0 15px;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    background: #fff;
+    color: #344054;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.nav-link:hover {
+    background: #f2f4f7;
+}
+
+.sign-out {
+    color: #b42318;
+}
+
+.summary-card,
+.accounts-card {
+    border: 1px solid #eaecf0;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(16 24 40 / 5%);
+}
+
+.summary-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(280px, 100%);
+    margin-bottom: 24px;
+    padding: 20px 24px;
+}
+
+.summary-label {
+    color: #667085;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.summary-number {
+    font-size: 32px;
+    letter-spacing: -0.04em;
+}
+
+.accounts-card {
+    overflow: hidden;
+}
+
+.table-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 22px 24px;
+}
+
+.table-heading h2 {
+    margin-bottom: 5px;
+    font-size: 18px;
+}
+
+.table-heading p,
+.history-note {
+    margin-bottom: 0;
+    color: #667085;
+    font-size: 13px;
+}
+
+.account-count {
+    flex: 0 0 auto;
+    padding: 5px 10px;
+    border-radius: 16px;
+    background: #f2f4f7;
+    color: #344054;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.table-scroll {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    white-space: nowrap;
+}
+
+thead {
+    background: #f9fafb;
+}
+
+th,
+td {
+    padding: 14px 18px;
+    border-top: 1px solid #eaecf0;
+    font-size: 13px;
+}
+
+th {
+    color: #667085;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+td {
+    color: #344054;
+}
+
+tbody tr:hover {
+    background: #fcfcfd;
+}
+
+.person-name {
+    color: #101828;
+    font-weight: 600;
+}
+
+.muted {
+    color: #98a2b3;
+}
+
+.history-note {
+    padding: 16px 24px 20px;
+}
+
+.empty-state {
+    margin: 0;
+    padding: 36px 24px;
+    border-top: 1px solid #eaecf0;
+    color: #667085;
+    text-align: center;
+}
+
+.admin-notice,
+.unlock-code-card {
+    margin: 18px 24px 0;
+    padding: 13px 16px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    font-size: 14px;
+}
+
+.error-notice {
+    border-color: #fecdca;
+    background: #fef3f2;
+    color: #b42318;
+}
+
+.success-notice {
+    border-color: #abefc6;
+    background: #ecfdf3;
+    color: #067647;
+}
+
+.unlock-code-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    border-color: #b2ddff;
+    background: #eff8ff;
+}
+
+.unlock-code-card h2 {
+    margin: 0 0 5px;
+    color: #1849a9;
+    font-size: 15px;
+}
+
+.unlock-code-card p {
+    margin: 0;
+    color: #344054;
+    font-size: 13px;
+}
+
+.unlock-code-card code {
+    flex: 0 0 auto;
+    padding: 10px 12px;
+    border: 1px solid #b2ddff;
+    border-radius: 7px;
+    background: #fff;
+    color: #1849a9;
+    font-size: 15px;
+    font-weight: 700;
+    user-select: all;
+}
+
+.lock-actions {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.account-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 8px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.account-status svg,
+.icon-button svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.active-status {
+    background: #ecfdf3;
+    color: #067647;
+}
+
+.locked-status {
+    background: #fef3f2;
+    color: #b42318;
+}
+
+.lock-actions form {
+    margin: 0;
+}
+
+.icon-button,
+.unlock-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 34px;
+    padding: 0 9px;
+    border: 1px solid #d0d5dd;
+    border-radius: 7px;
+    background: #fff;
+    color: #344054;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.icon-button:hover,
+.unlock-button:hover {
+    background: #f9fafb;
+}
+
+.lock-button {
+    border-color: #fecdca;
+    color: #b42318;
+}
+
+.regenerate-button {
+    border-color: #b2ddff;
+    color: #175cd3;
+}
+
+.delete-account-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 34px;
+    padding: 0 10px;
+    border: 1px solid #fecdca;
+    border-radius: 7px;
+    background: #fff;
+    color: #b42318;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.delete-account-button:hover {
+    background: #fef3f2;
+}
+
+.delete-account-button svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.unlock-form {
+    display: flex;
+    gap: 5px;
+}
+
+.unlock-form input {
+    width: 125px;
+    min-height: 34px;
+    padding: 0 8px;
+    border: 1px solid #d0d5dd;
+    border-radius: 7px;
+    font: inherit;
+    font-size: 12px;
+}
+
+.unlock-button {
+    border-color: #abefc6;
+    color: #067647;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+}
+
+@media (max-width: 640px) {
+    .admin-page {
+        width: min(100% - 32px, 1160px);
+        padding: 28px 0;
+    }
+
+    .page-header {
+        flex-direction: column;
+    }
+
+    .table-heading {
+        align-items: flex-start;
+        padding: 18px 16px;
+    }
+
+    th,
+    td {
+        padding: 12px 14px;
+    }
+
+    .history-note {
+        padding: 14px 16px 18px;
+    }
+
+    .admin-notice,
+    .unlock-code-card {
+        margin-right: 16px;
+        margin-left: 16px;
+    }
+
+    .unlock-code-card {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .lock-actions {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
+.admin-login-body {
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background:
+        radial-gradient(ellipse at 15% 10%, rgb(208 239 235 / 55%), transparent 42%),
+        #f7f8fa;
+}
+
+.admin-login-card {
+    width: min(100%, 420px);
+    padding: 40px;
+    border: 1px solid #eaecf0;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 16px 44px rgb(16 24 40 / 9%);
+}
+
+.admin-brand {
+    display: inline-block;
+    margin-bottom: 42px;
+    color: #03494b;
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+}
+
+.admin-brand span {
+    color: #344054;
+}
+
+.admin-login-card .eyebrow {
+    margin-bottom: 9px;
+    color: #027a71;
+}
+
+.admin-login-card h1 {
+    margin-bottom: 8px;
+    font-size: 30px;
+}
+
+.admin-login-card .intro {
+    margin-bottom: 28px;
+}
+
+.admin-login-form {
+    display: grid;
+    gap: 10px;
+}
+
+.admin-login-form label {
+    margin-top: 8px;
+    color: #344054;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.admin-login-form input {
+    width: 100%;
+    height: 46px;
+    padding: 0 13px;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    background: #fff;
+    color: #101828;
+    font: inherit;
+}
+
+.admin-login-form input:focus {
+    outline: 3px solid rgb(2 122 113 / 15%);
+    border-color: #027a71;
+}
+
+.admin-login-form button {
+    min-height: 48px;
+    margin-top: 18px;
+    border: 0;
+    border-radius: 8px;
+    background: #03494b;
+    color: #fff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+}
+
+.admin-login-form button:hover {
+    background: #023c3e;
+}
+
+.login-error {
+    margin: 0 0 18px;
+    padding: 11px 13px;
+    border: 1px solid #fecdca;
+    border-radius: 8px;
+    background: #fef3f2;
+    color: #b42318;
+    font-size: 14px;
+}
+
+@media (max-width: 480px) {
+    .admin-login-card {
+        padding: 28px 22px;
+    }
+
+    .admin-brand {
+        margin-bottom: 32px;
+    }
+}
+
+.account-lock-body {
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background:
+        radial-gradient(ellipse at 15% 10%, rgb(208 239 235 / 55%), transparent 42%),
+        #f7f8fa;
+}
+
+.account-lock-card {
+    width: min(100%, 460px);
+    padding: 40px;
+    border: 1px solid #eaecf0;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 16px 44px rgb(16 24 40 / 9%);
+    text-align: center;
+}
+
+.account-lock-icon {
+    display: grid;
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 20px;
+    place-items: center;
+    border-radius: 50%;
+    background: #fef3f2;
+    color: #b42318;
+}
+
+.account-lock-icon svg {
+    width: 28px;
+    height: 28px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.account-lock-card .eyebrow {
+    margin-bottom: 9px;
+    color: #b42318;
+}
+
+.account-lock-card h1 {
+    margin-bottom: 10px;
+    font-size: 28px;
+}
+
+.account-lock-card .intro {
+    margin-bottom: 26px;
+    line-height: 1.6;
+}
+
+.account-lock-form {
+    display: grid;
+    gap: 10px;
+    text-align: left;
+}
+
+.account-lock-form label {
+    color: #344054;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.account-lock-form input {
+    width: 100%;
+    height: 48px;
+    padding: 0 14px;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    color: #101828;
+    font-family: inherit;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.account-lock-form input:focus {
+    outline: 3px solid rgb(2 122 113 / 15%);
+    border-color: #027a71;
+}
+
+.account-lock-form button {
+    min-height: 46px;
+    margin-top: 8px;
+    border: 0;
+    border-radius: 8px;
+    background: #03494b;
+    color: #fff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+}
+
+.account-lock-form button:hover {
+    background: #023c3e;
+}
+
+.lock-form-error {
+    margin: 0 0 18px;
+    padding: 11px 13px;
+    border: 1px solid #fecdca;
+    border-radius: 8px;
+    background: #fef3f2;
+    color: #b42318;
+    font-size: 14px;
+    text-align: left;
+}
+
+.lock-logout-link {
+    display: inline-block;
+    margin-top: 22px;
+    color: #667085;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.lock-logout-link:hover {
+    color: #344054;
+    text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+    .account-lock-card {
+        padding: 30px 22px;
+    }
+}

@@ -40,7 +40,26 @@ from watermarking import (
 )
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'change-this-long-random-string')
+IS_PRODUCTION = os.environ.get('APP_ENV') == 'production'
+_secret_key = os.environ.get('SECRET_KEY', '')
+if len(_secret_key) < 32:
+    if IS_PRODUCTION:
+        raise RuntimeError('SECRET_KEY must be set to a random string of 32+ characters in production.')
+    print('WARNING: SECRET_KEY is not set (or too short). Using a temporary random key; '
+          'sessions will reset on every restart. Set SECRET_KEY in your .env file.')
+    _secret_key = secrets.token_hex(32)
+app.secret_key = _secret_key
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=IS_PRODUCTION,
+    PERMANENT_SESSION_LIFETIME=timedelta(days=7),
+    MAX_CONTENT_LENGTH=int(os.environ.get('MAX_UPLOAD_MB', '200')) * 1024 * 1024,
+)
+if os.environ.get('TRUST_PROXY') == '1':
+    # Needed on Render/Railway/Heroku etc. so client IPs, https and host are read correctly.
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', '')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '')
 ADMIN_PASSWORD_HASH = generate_password_hash(ADMIN_PASSWORD) if ADMIN_PASSWORD else ''
@@ -96,6 +115,206 @@ def allowed_file(filename):
     """Checks if a file has an allowed extension."""
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# ======================= Security helpers =======================
+import re
+import threading
+from collections import defaultdict, deque
+from urllib.parse import urlparse
+from flask import abort
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PRIVATE_DIR = os.path.join(BASE_DIR, 'private_data')          # NOT web-accessible
+PRIVATE_TMP = os.path.join(PRIVATE_DIR, 'tmp')
+PRIVATE_DOWNLOADS = os.path.join(PRIVATE_DIR, 'downloads')
+PRIVATE_FAVORITES = os.path.join(PRIVATE_DIR, 'favorites')
+PRIVATE_GUEST_FACES = os.path.join(PRIVATE_DIR, 'guest_faces')
+MATCH_ROOT = os.path.join(BASE_DIR, 'matchphotos')
+for _d in (PRIVATE_TMP, PRIVATE_DOWNLOADS, PRIVATE_FAVORITES, PRIVATE_GUEST_FACES, MATCH_ROOT):
+    os.makedirs(_d, exist_ok=True)
+
+Image.MAX_IMAGE_PIXELS = 120_000_000   # protect against decompression bombs
+
+# Only for local development: return the OTP in the API response. Never active in production.
+DEV_OTP_ECHO = os.environ.get('DEV_OTP_ECHO') == '1' and not IS_PRODUCTION
+EXTRA_ALLOWED_HOSTS = {h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()}
+
+_rate_lock = threading.Lock()
+_rate_hits = defaultdict(deque)
+
+
+def client_ip():
+    return request.remote_addr or 'unknown'
+
+
+def rate_exceeded(key, limit, window):
+    """True if `key` already has `limit` recorded hits inside the last `window` seconds."""
+    now = time.time()
+    with _rate_lock:
+        q = _rate_hits[key]
+        while q and now - q[0] > window:
+            q.popleft()
+        if not q:
+            _rate_hits.pop(key, None)
+            return False
+        return len(q) >= limit
+
+
+def rate_record(key):
+    with _rate_lock:
+        _rate_hits[key].append(time.time())
+        if len(_rate_hits) > 20000:          # crude memory cap
+            for k in list(_rate_hits)[:5000]:
+                _rate_hits.pop(k, None)
+
+
+def rate_limited(key, limit, window):
+    """Check and record in one step."""
+    if rate_exceeded(key, limit, window):
+        return True
+    rate_record(key)
+    return False
+
+
+def safe_join(base, *parts):
+    """Join paths but return None if the result escapes `base` (blocks ../ and absolute paths)."""
+    try:
+        base_real = os.path.realpath(base)
+        target = os.path.realpath(os.path.join(base_real, *parts))
+    except (ValueError, TypeError):
+        return None
+    if target == base_real or not target.startswith(base_real + os.sep):
+        return None
+    return target
+
+
+def cleanup_old_files(directory, max_age_seconds):
+    try:
+        now = time.time()
+        for name in os.listdir(directory):
+            path = os.path.join(directory, name)
+            try:
+                if now - os.path.getmtime(path) > max_age_seconds:
+                    if os.path.isdir(path):
+                        import shutil
+                        shutil.rmtree(path, ignore_errors=True)
+                    else:
+                        os.remove(path)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+def get_match_dir():
+    """Per-visitor folder for match results (so guests never see each other's photos)."""
+    sid = session.get('match_sid')
+    if not sid or not re.fullmatch(r'[0-9a-f]{32}', str(sid)):
+        sid = uuid.uuid4().hex
+        session['match_sid'] = sid
+    path = os.path.join(MATCH_ROOT, sid)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def is_event_owner(event_id):
+    uid = session.get('user_id')
+    if not uid:
+        return False
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        return conn.execute('SELECT 1 FROM events WHERE id = ? AND user_id = ?', (event_id, uid)).fetchone() is not None
+    finally:
+        conn.close()
+
+
+def is_verified_guest(event_id):
+    return bool(session.get(f'otp_verified_{event_id}') and session.get(f'guest_info_complete_{event_id}'))
+
+
+def can_access_event(event_id):
+    return is_verified_guest(event_id) or is_event_owner(event_id)
+
+
+def accessible_event_folders():
+    """Upload-folder names of events this visitor may see (owned, or OTP-verified guest)."""
+    ids = set()
+    for key in list(session.keys()):
+        if key.startswith('guest_info_complete_'):
+            suffix = key[len('guest_info_complete_'):]
+            if suffix.isdigit() and session.get(f'otp_verified_{suffix}') and session.get(key):
+                ids.add(int(suffix))
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        folders = set()
+        uid = session.get('user_id')
+        if uid:
+            for (name,) in conn.execute('SELECT event_name FROM events WHERE user_id = ?', (uid,)):
+                folders.add(secure_filename(name or ''))
+        if ids:
+            marks = ','.join('?' * len(ids))
+            for (name,) in conn.execute(f'SELECT event_name FROM events WHERE id IN ({marks})', tuple(ids)):
+                folders.add(secure_filename(name or ''))
+        return folders
+    finally:
+        conn.close()
+
+
+@app.before_request
+def block_cross_site_posts():
+    """Reject state-changing requests that were triggered from another website (CSRF)."""
+    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+        origin = request.headers.get('Origin') or request.headers.get('Referer')
+        if origin:
+            host = urlparse(origin).netloc
+            if host != request.host and host not in EXTRA_ALLOWED_HOSTS:
+                abort(403)
+
+
+@app.before_request
+def guard_private_uploads():
+    """/static/uploads/* is only readable by the event owner, verified guests of that event,
+    or (for cover photos / watermark logos) the public. Everything else 404s."""
+    prefix = '/static/uploads/'
+    if not request.path.startswith(prefix):
+        return None
+    rel = request.path[len(prefix):]
+    parts = rel.split('/')
+    if not rel or any(p in ('', '.', '..') or '\\' in p for p in parts):
+        abort(404)
+    first = parts[0]
+    if len(parts) == 1:
+        if first == 'default-cover.jpg':
+            return None
+        abort(404)
+    if first == 'watermarks':
+        return None
+    if first in ('downloads', 'favorites', 'guest_faces'):
+        abort(404)
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        is_cover = conn.execute('SELECT 1 FROM events WHERE cover_photo = ?', (rel,)).fetchone() is not None
+    finally:
+        conn.close()
+    if is_cover or first in accessible_event_folders():
+        return None
+    abort(404)
+
+
+@app.after_request
+def add_security_headers(resp):
+    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    resp.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+    resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    if IS_PRODUCTION:
+        resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    return resp
+
+
+@app.errorhandler(413)
+def too_large(_e):
+    return jsonify({'status': 'error', 'message': 'Upload is too large.'}), 413
+# ===================== end security helpers =====================
 
 def init_db():
     """Create the application tables and add columns missing from older databases."""
@@ -185,7 +404,11 @@ def init_db():
             'photos': ('sub_event_id', 'INTEGER REFERENCES sub_events(id)'),
             'guest_users': ('created_at', 'TIMESTAMP'),
         }
-        for table, (column, definition) in migrations.items():
+        migrations_list = list(migrations.items()) + [
+            ('guest_users', ('photo_path', 'TEXT')),
+            ('guest_users', ('matches_found', 'INTEGER')),
+        ]
+        for table, (column, definition) in migrations_list:
             columns = {row[1] for row in cur.execute(f'PRAGMA table_info({table})')}
             if column not in columns:
                 cur.execute(f'ALTER TABLE {table} ADD COLUMN {column} {definition}')
@@ -844,49 +1067,89 @@ def logout():
 def login():
     error = None
     if request.method == 'POST':
-        username_or_email = request.form['username_or_email']
-        password = request.form['password']
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute('SELECT id, first_name, is_locked FROM users WHERE (username = ? OR email = ?) AND password = ? AND password != \'\'', 
-                       (username_or_email, username_or_email, password))
-        user = cursor.fetchone()
-        if user:
-            cursor.execute(
-                'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?',
-                (user[0],),
-            )
-            conn.commit()
-        conn.close()
+        identifier = request.form.get('username_or_email', '').strip()
+        password = request.form.get('password', '')
+        key_ip = f'login-ip:{client_ip()}'
+        key_id = f'login-id:{identifier.lower()}'
+        if rate_exceeded(key_ip, 20, 600) or rate_exceeded(key_id, 8, 600):
+            return render_template('login.html', error='Too many attempts. Please wait a few minutes and try again.'), 429
+        user = None
+        if identifier and password:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            rows = cursor.execute(
+                "SELECT id, first_name, password FROM users WHERE (username = ? OR email = ?) AND password != ''",
+                (identifier, identifier),
+            ).fetchall()
+            for row in rows:
+                stored = row[2] or ''
+                if stored.startswith(('scrypt:', 'pbkdf2:')):
+                    ok = check_password_hash(stored, password)
+                else:
+                    # Legacy plain-text password: accept once, then upgrade it to a hash.
+                    ok = secrets.compare_digest(stored.encode('utf-8'), password.encode('utf-8'))
+                    if ok:
+                        cursor.execute('UPDATE users SET password = ? WHERE id = ?',
+                                       (generate_password_hash(password), row[0]))
+                if ok:
+                    user = row
+                    break
+            if user:
+                cursor.execute('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?', (user[0],))
+                conn.commit()
+            conn.close()
         if user:
             session.clear()
             session['user_id'] = user[0]
             session['first_name'] = user[1]
             return redirect(url_for('dashboard'))
-        else:
-            error = 'Invalid username or password. Please try again.'
+        rate_record(key_ip)
+        rate_record(key_id)
+        error = 'Invalid username or password. Please try again.'
     return render_template('login.html', error=error)
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
-        first_name = request.form['first_name']
-        last_name = request.form['last_name']
-        username = request.form['username']
-        email = request.form['email']
-        password = request.form['password']
+        first_name = request.form.get('first_name', '').strip()
+        last_name = request.form.get('last_name', '').strip()
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+
+        if rate_limited(f'signup-ip:{client_ip()}', 10, 3600):
+            return render_template('signup.html', error='Too many sign-ups from your network. Try again later.'), 429
+        problem = None
+        if not first_name or not username or not email or not password:
+            problem = 'Please fill in all required fields.'
+        elif not re.fullmatch(r'[A-Za-z0-9_.-]{3,40}', username):
+            problem = 'Username must be 3-40 characters: letters, numbers, dot, dash or underscore.'
+        elif not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email) or len(email) > 254:
+            problem = 'Please enter a valid email address.'
+        elif len(password) < 8 or len(password) > 128:
+            problem = 'Password must be 8 to 128 characters.'
+        if problem:
+            return render_template('signup.html', error=problem), 400
+
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO users (
-                first_name, last_name, username, email, password,
-                registered_at, last_login_at
-            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        ''', (first_name, last_name, username, email, password))
-        conn.commit()
-        user_id = cursor.lastrowid
+        if cursor.execute('SELECT 1 FROM users WHERE username = ? OR email = ?', (username, email)).fetchone():
+            conn.close()
+            return render_template('signup.html', error='That username or email is already in use.'), 400
+        try:
+            cursor.execute('''
+                INSERT INTO users (
+                    first_name, last_name, username, email, password,
+                    registered_at, last_login_at
+                ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ''', (first_name, last_name, username, email, generate_password_hash(password)))
+            conn.commit()
+            user_id = cursor.lastrowid
+        except sqlite3.IntegrityError:
+            conn.close()
+            return render_template('signup.html', error='That username or email is already in use.'), 400
         conn.close()
-        
+
         session.clear()
         session['user_id'] = user_id
         session['first_name'] = first_name
@@ -907,8 +1170,7 @@ def get_or_create_pin(event_id, conn, return_only=False):
         
     # Generate 6-char alphanumeric PIN
     import string
-    import random
-    new_pin = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    new_pin = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
     
     cursor.execute("UPDATE events SET pin_code = ? WHERE id = ?", (new_pin, event_id))
     conn.commit()
@@ -942,8 +1204,7 @@ def create_event():
         
         # Generate a random 6-character PIN code for the event
         import string
-        import random
-        new_pin = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        new_pin = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
 
         # Save event directly to DB, skipping privacy step
         conn = sqlite3.connect('database.db')
@@ -1141,7 +1402,7 @@ def upload_photos(event_id):
     if (
         watermark_settings['enabled']
         and watermark_settings['logo_filename']
-        and not os.path.isfile(primary_logo_path)
+        and not os.path.isfile(watermark_logo_path)
     ):
         conn.close()
         app.logger.error(
@@ -1152,7 +1413,7 @@ def upload_photos(event_id):
     sub_event_id = request.form.get('sub_event_id')
     compress_quality = request.form.get('compress', '85')
     
-    print(f"DEBUG: Uploading photos for event '{event_name}' (ID: {event_id}), Folder ID: {sub_event_id}, Compress Quality: {compress_quality}")
+    app.logger.debug(f"Uploading photos for event '{event_name}' (ID: {event_id}), Folder ID: {sub_event_id}, Compress Quality: {compress_quality}")
     
     # Create event-specific folder
     folder_name = secure_filename(event_name)
@@ -1230,17 +1491,17 @@ def upload_photos(event_id):
         cache_path = os.path.join(event_folder, "embeddings_cache.pt")
         def train_model():
             try:
-                print(f"DEBUG: Starting background auto-training for event {event_name}...")
+                app.logger.debug(f"Starting background auto-training for event {event_name}...")
                 matcher.load_or_compute_directory_embeddings(event_folder, cache_path)
-                print(f"DEBUG: Completed background auto-training for event {event_name}.")
+                app.logger.debug(f"Completed background auto-training for event {event_name}.")
             except Exception as e:
-                print(f"DEBUG: Background training failed: {e}")
+                app.logger.debug(f"Background training failed: {e}")
                 
         bg_thread = threading.Thread(target=train_model)
         bg_thread.daemon = True
         bg_thread.start()
     except Exception as e:
-        print(f"DEBUG: Failed to start auto-train thread: {e}")
+        app.logger.debug(f"Failed to start auto-train thread: {e}")
 
     if sub_event_id:
         return redirect(url_for('view_sub_album', event_id=event_id, sub_event_id=sub_event_id))
@@ -1270,7 +1531,7 @@ def delete_event(event_id):
             if os.path.exists(file_path):
                 os.remove(file_path)
         except Exception as e:
-            print(f"Error deleting file {filename}: {e}")
+            app.logger.error(f"Error deleting file {filename}: {e}")
 
     cursor.execute("DELETE FROM photos WHERE event_id = ?", (event_id,))
     cursor.execute("DELETE FROM sub_events WHERE event_id = ?", (event_id,))
@@ -1308,7 +1569,7 @@ def delete_photo(photo_id):
         if os.path.exists(file_path):
             os.remove(file_path)
     except Exception as e:
-        print(f"Error deleting file {filename}: {e}")
+        app.logger.error(f"Error deleting file {filename}: {e}")
 
     cursor.execute("DELETE FROM photos WHERE id = ?", (photo_id,))
     conn.commit()
@@ -1346,7 +1607,7 @@ def delete_all_photos(event_id):
             if os.path.exists(file_path):
                 os.remove(file_path)
         except Exception as e:
-            print(f"Error deleting file {filename}: {e}") # Log the error
+            app.logger.error(f"Error deleting file {filename}: {e}") # Log the error
 
     # Step 2: Delete all photo records for this event from the 'photos' table
     cursor.execute("DELETE FROM photos WHERE event_id = ?", (event_id,))
@@ -1420,12 +1681,16 @@ def find_photos(event_id):
 
 @app.route('/guest_signup/<int:event_id>', methods=['POST'])
 def guest_signup(event_id):
-    email = request.form.get('email', '').strip()
-    phone = request.form.get('phone', '').strip()
+    email = request.form.get('email', '').strip()[:254]
+    phone = request.form.get('phone', '').strip()[:30]
     
     # Validate at least one is provided
     if not email and not phone:
         return jsonify({'error': 'Email or phone number required'}), 400
+    if not _event_exists(event_id):
+        return jsonify({'error': 'Event not found'}), 404
+    if rate_limited(f'guest-signup:{client_ip()}', 10, 3600):
+        return jsonify({'error': 'Too many requests'}), 429
     
     # Store in database
     conn = sqlite3.connect('database.db')
@@ -1449,45 +1714,48 @@ def guest_signup(event_id):
 
 # OTP Authentication Routes
 def generate_otp():
-    """Generate a 6-digit OTP code"""
-    return ''.join(random.choices(string.digits, k=6))
+    """Generate a cryptographically secure 6-digit OTP code"""
+    return ''.join(secrets.choice(string.digits) for _ in range(6))
+
+
+def _event_exists(event_id):
+    conn = sqlite3.connect('database.db')
+    try:
+        return conn.execute('SELECT 1 FROM events WHERE id = ?', (event_id,)).fetchone() is not None
+    finally:
+        conn.close()
 
 
 @app.route('/request_otp/<int:event_id>', methods=['POST'])
 def request_otp(event_id):
     """Generate and send OTP to email or phone"""
-    data = request.get_json()
-    contact = data.get('contact', '').strip()
-    
-    if not contact:
+    data = request.get_json(silent=True) or {}
+    contact = str(data.get('contact', '')).strip()
+
+    if not contact or len(contact) > 254:
         return jsonify({'error': 'Email or phone number required'}), 400
-    
-    # Generate OTP
+    if not _event_exists(event_id):
+        return jsonify({'error': 'Event not found'}), 404
+    if rate_limited(f'otp-req-ip:{client_ip()}', 15, 3600) or \
+       rate_limited(f'otp-req:{event_id}:{contact.lower()}', 5, 600):
+        return jsonify({'error': 'Too many OTP requests. Please wait a few minutes.'}), 429
+
     otp_code = generate_otp()
-    
-    # Set expiration time (10 minutes from now)
     expires_at = datetime.now() + timedelta(minutes=10)
-    
-    # Store OTP in database
+
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
-    
-    # Delete any existing unverified OTPs for this contact and event
     cursor.execute('''
         DELETE FROM otp_codes 
         WHERE event_id = ? AND contact = ? AND verified = 0
     ''', (event_id, contact))
-    
-    # Insert new OTP
     cursor.execute('''
         INSERT INTO otp_codes (event_id, contact, otp_code, expires_at)
         VALUES (?, ?, ?, ?)
     ''', (event_id, contact, otp_code, expires_at))
-    
     conn.commit()
     conn.close()
-    
-    # Send OTP via email or SMS
+
     if '@' in contact:  # Email
         try:
             msg = Message(
@@ -1498,79 +1766,81 @@ def request_otp(event_id):
             mail.send(msg)
             return jsonify({'success': True, 'message': 'OTP sent to your email'})
         except Exception as e:
-            print(f"Email error: {e}")
-            # For development, return OTP in response (REMOVE IN PRODUCTION)
-            return jsonify({'success': True, 'message': f'OTP (dev mode): {otp_code}'})
-    else:  # Phone (SMS - placeholder)
-        # TODO: Implement SMS sending with Twilio or similar service
-        # For now, return OTP in response for development
+            app.logger.error('Email error: %s', e)
+            if DEV_OTP_ECHO:
+                return jsonify({'success': True, 'message': f'OTP (dev mode): {otp_code}'})
+            return jsonify({'error': 'Could not send the OTP email. Please try again later.'}), 502
+    # Phone (SMS) - not implemented yet. The code is never returned to the browser in production.
+    if DEV_OTP_ECHO:
         return jsonify({'success': True, 'message': f'SMS not configured. OTP (dev mode): {otp_code}'})
+    return jsonify({'error': 'SMS verification is not available yet. Please use your email address.'}), 501
 
 
 @app.route('/verify_otp/<int:event_id>', methods=['POST'])
 def verify_otp(event_id):
     """Verify OTP code"""
-    data = request.get_json()
-    contact = data.get('contact', '').strip()
-    otp_code = data.get('otp_code', '').strip()
-    
+    data = request.get_json(silent=True) or {}
+    contact = str(data.get('contact', '')).strip()
+    otp_code = str(data.get('otp_code', '')).strip()
+
     if not contact or not otp_code:
         return jsonify({'error': 'Contact and OTP code required'}), 400
-    
+
+    fail_key = f'otp-fail:{event_id}:{contact.lower()}'
+    ip_key = f'otp-fail-ip:{client_ip()}'
+    if rate_exceeded(fail_key, 5, 600) or rate_exceeded(ip_key, 30, 600):
+        conn = sqlite3.connect('database.db')
+        conn.execute('DELETE FROM otp_codes WHERE event_id = ? AND contact = ? AND verified = 0', (event_id, contact))
+        conn.commit()
+        conn.close()
+        return jsonify({'error': 'Too many wrong attempts. Please request a new OTP later.'}), 429
+
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
-    
-    # Find valid OTP
     cursor.execute('''
         SELECT id, otp_code, expires_at FROM otp_codes
         WHERE event_id = ? AND contact = ? AND verified = 0
         ORDER BY created_at DESC LIMIT 1
     ''', (event_id, contact))
-    
     otp_record = cursor.fetchone()
-    
+
     if not otp_record:
         conn.close()
         return jsonify({'error': 'No OTP found. Please request a new one.'}), 400
-    
+
     otp_id, stored_otp, expires_at = otp_record
-    
-    # Check if OTP has expired
+
     if datetime.now() > datetime.fromisoformat(expires_at):
         conn.close()
         return jsonify({'error': 'OTP has expired. Please request a new one.'}), 400
-    
-    # Verify OTP
-    if otp_code != stored_otp:
+
+    if not secrets.compare_digest(otp_code.encode('utf-8'), str(stored_otp).encode('utf-8')):
         conn.close()
+        rate_record(fail_key)
+        rate_record(ip_key)
         return jsonify({'error': 'Invalid OTP code'}), 400
-    
-    # Mark OTP as verified
+
     cursor.execute('UPDATE otp_codes SET verified = 1 WHERE id = ?', (otp_id,))
-    
-    # Check if this user already exists (returning user)
+
     cursor.execute('''
         SELECT id, first_name, last_name, email, phone 
         FROM guest_users 
         WHERE event_id = ? AND (email = ? OR phone = ?)
     ''', (event_id, contact, contact))
-    
     existing_user = cursor.fetchone()
-    
+
     conn.commit()
     conn.close()
-    
-    # Set session
+
     session[f'otp_verified_{event_id}'] = True
     session[f'otp_contact_{event_id}'] = contact
-    
+
     if existing_user:
-        # Returning user - auto-complete their info
         user_id, first_name, last_name, email, phone = existing_user
         session[f'guest_info_complete_{event_id}'] = True
         session[f'guest_name_{event_id}'] = f'{first_name} {last_name}'
         session[f'guest_email_{event_id}'] = email or phone
-        
+
         return jsonify({
             'success': True, 
             'message': 'OTP verified successfully',
@@ -1578,7 +1848,6 @@ def verify_otp(event_id):
             'user_name': f'{first_name} {last_name}'
         })
     else:
-        # New user - needs to fill in details
         return jsonify({
             'success': True, 
             'message': 'OTP verified successfully',
@@ -1589,12 +1858,19 @@ def verify_otp(event_id):
 @app.route('/save_guest_info/<int:event_id>', methods=['POST'])
 def save_guest_info(event_id):
     """Save guest user information after OTP verification"""
-    data = request.get_json()
-    first_name = data.get('first_name', '').strip()
-    last_name = data.get('last_name', '').strip()
-    email = data.get('email', '').strip()
-    phone = data.get('phone', '').strip()
-    contact = data.get('contact', '').strip()
+    # SECURITY: only a visitor who verified an OTP for this event may register / become a guest.
+    if not session.get(f'otp_verified_{event_id}'):
+        return jsonify({'error': 'Please verify your OTP first'}), 403
+    data = request.get_json(silent=True) or {}
+    first_name = str(data.get('first_name', '')).strip()[:100]
+    last_name = str(data.get('last_name', '')).strip()[:100]
+    email = str(data.get('email', '')).strip()[:254]
+    phone = str(data.get('phone', '')).strip()[:30]
+    contact = str(data.get('contact', '')).strip()
+    verified_contact = session.get(f'otp_contact_{event_id}')
+    # The email/phone saved must be the one that was actually verified.
+    if verified_contact not in (email, phone):
+        return jsonify({'error': 'Contact does not match the verified OTP'}), 403
     
     if not first_name or not last_name:
         return jsonify({'error': 'First and last name are required'}), 400
@@ -1656,7 +1932,7 @@ def save_guest_info(event_id):
         # User already registered, ignore
         pass
     except Exception as e:
-        print(f"Error saving to thirduser DB: {e}")
+        app.logger.error(f"Error saving to thirduser DB: {e}")
     
     # Mark as fully authenticated
     session[f'guest_info_complete_{event_id}'] = True
@@ -1719,6 +1995,9 @@ def auth_event(event_id):
 @app.route('/auth/event/<int:event_id>/verify_pin', methods=['POST'])
 def verify_pin(event_id):
     entered_pin = request.form.get('pin_code', '').strip().upper()
+    pin_key = f'pin:{event_id}:{client_ip()}'
+    if rate_exceeded(pin_key, 5, 600):
+        return redirect(url_for('auth_event', event_id=event_id, mode='private', error='Too many attempts. Try again in a few minutes.'))
     
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
@@ -1726,9 +2005,10 @@ def verify_pin(event_id):
     event = cursor.fetchone()
     conn.close()
     
-    if event and event[0] == entered_pin:
+    if event and event[0] and secrets.compare_digest(str(event[0]), entered_pin):
         session[f'pin_verified_{event_id}'] = True
         return redirect(url_for('auth_event', event_id=event_id, mode='private'))
+    rate_record(pin_key)
     
     # Return to the auth route but we should flash an error or pass a pin_error.
     # We will let the verify_pin template handle the error param via the URL.
@@ -1770,341 +2050,247 @@ def share_event(event_id):
 def match_photos_api():
     if 'photo' not in request.files:
         return jsonify({'status': 'error', 'message': 'No photo provided'}), 400
-    
+
     file = request.files['photo']
-    if file.filename == '':
+    if not file or file.filename == '':
         return jsonify({'status': 'error', 'message': 'No photo selected'}), 400
-        
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        # Save temp user photo
-        user_photo_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_search_{int(time.time())}_{filename}")
-        file.save(user_photo_path)
-        
-        # Define directories
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # Default to Bhuman if no event specified (backward compatibility)
-        search_dir = os.path.join(base_dir, 'Bhuman') 
-        
-        # Check if event_id is provided
-        event_id = request.form.get('event_id')
-        if event_id:
-            conn = sqlite3.connect('database.db')
-            cursor = conn.cursor()
-            cursor.execute("SELECT event_name FROM events WHERE id = ?", (event_id,))
-            event = cursor.fetchone()
-            conn.close()
-            
-            if event:
-                event_name = event[0]
-                # Use the event's upload folder
-                search_dir = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(event_name))
-                print(f"DEBUG: Searching in event folder: {search_dir}")
-        else:
-            print("DEBUG: searching in default Bhuman folder")
+    if not allowed_file(file.filename):
+        return jsonify({'status': 'error', 'message': 'Invalid file type'}), 400
 
-        match_output_dir = os.path.join(base_dir, 'matchphotos')
-        
-        # Run matching
+    # Who may search? Verified guests / owner of that event. The legacy "no event" mode needs a login.
+    event_id_raw = request.form.get('event_id')
+    event_id = None
+    if event_id_raw:
         try:
-            # Clear matchphotos directory before starting a new search
-            if os.path.exists(match_output_dir):
-                import shutil
-                for f in os.listdir(match_output_dir):
-                    file_path = os.path.join(match_output_dir, f)
-                    try:
-                        if os.path.isfile(file_path) or os.path.islink(file_path):
-                            os.unlink(file_path)
-                        elif os.path.isdir(file_path):
-                            shutil.rmtree(file_path)
-                    except Exception as e:
-                        app.logger.error(f"Error clearing matchphotos file {f}: {e}")
-            else:
-                os.makedirs(match_output_dir, exist_ok=True)
+            event_id = int(event_id_raw)
+        except ValueError:
+            return jsonify({'status': 'error', 'message': 'Invalid event'}), 400
+        if not can_access_event(event_id):
+            return jsonify({'status': 'error', 'message': 'Please verify your access to this event first'}), 403
+    elif 'user_id' not in session:
+        return jsonify({'status': 'error', 'message': 'Login required'}), 401
 
-            result = matcher.find_matches(
-                user_photo_path, 
-                search_dir, 
-                match_output_dir,
-                tolerance=0.60
-            )
-            
-            match_count = result.get('matches_found', 0)
-            
-            # ---- Save persistent copy for guest visitors tracking ----
-            if event_id and session.get(f'guest_info_complete_{event_id}'):
-                try:
-                    guest_email = session.get(f'guest_email_{event_id}')
-                    if guest_email:
-                        # Create a persistent copy
-                        guest_faces_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'guest_faces')
-                        os.makedirs(guest_faces_dir, exist_ok=True)
-                        
-                        persistent_filename = f"guest_{event_id}_{int(time.time())}_{filename}"
-                        persistent_path = os.path.join(guest_faces_dir, persistent_filename)
-                        
-                        import shutil
-                        shutil.copy2(user_photo_path, persistent_path)
-                        
-                        # Update database
-                        conn = sqlite3.connect('database.db')
-                        cursor = conn.cursor()
-                        
-                        # We might have email or phone in the session variable 'guest_email'
-                        cursor.execute('''
-                            UPDATE guest_users 
-                            SET photo_path = ?, matches_found = ?
-                            WHERE event_id = ? AND (email = ? OR phone = ?)
-                        ''', (persistent_filename, match_count, event_id, guest_email, guest_email))
-                        
-                        conn.commit()
-                        conn.close()
-                except Exception as e:
-                    app.logger.error(f"Error saving guest profile face: {e}")
-            # -------------------------------------------------------------
-            
-            # Remove temp file
-            try:
-                os.remove(user_photo_path)
-            except:
-                pass
-                
-            return jsonify({
-                'status': 'success', 
-                'match_count': match_count,
-                'matched_files': result.get('matched_files', [])
-            })
-            
-        except Exception as e:
-            app.logger.error(f"Error mapping photos: {e}")
-            return jsonify({'status': 'error', 'message': str(e)}), 500
-        
-        # Define directories
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # Default to Bhuman if no event specified (backward compatibility)
-        search_dir = os.path.join(base_dir, 'Bhuman') 
-        
-        # Check if event_id is provided
-        event_id = request.form.get('event_id')
-        if event_id:
+    if rate_limited(f'match:{client_ip()}', 30, 600):
+        return jsonify({'status': 'error', 'message': 'Too many searches. Please wait a few minutes.'}), 429
+
+    # Make sure it is really an image before touching the disk
+    data = file.read()
+    try:
+        Image.open(io.BytesIO(data)).verify()
+    except Exception:
+        return jsonify({'status': 'error', 'message': 'That file is not a valid image'}), 400
+
+    ext = os.path.splitext(secure_filename(file.filename))[1].lower() or '.jpg'
+    user_photo_path = os.path.join(PRIVATE_TMP, f"temp_search_{uuid.uuid4().hex}{ext}")
+    with open(user_photo_path, 'wb') as fh:
+        fh.write(data)
+
+    try:
+        search_dir = os.path.join(BASE_DIR, 'Bhuman')   # legacy default
+        if event_id is not None:
             conn = sqlite3.connect('database.db')
-            cursor = conn.cursor()
-            cursor.execute("SELECT event_name FROM events WHERE id = ?", (event_id,))
-            event = cursor.fetchone()
+            event = conn.execute("SELECT event_name FROM events WHERE id = ?", (event_id,)).fetchone()
             conn.close()
-            
-            if event:
-                event_name = event[0]
-                # Use the event's upload folder
-                search_dir = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(event_name))
-                print(f"DEBUG: Searching in event folder: {search_dir}")
-        else:
-            print("DEBUG: searching in default Bhuman folder")
+            if not event:
+                return jsonify({'status': 'error', 'message': 'Event not found'}), 404
+            search_dir = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(event[0]))
 
-        match_output_dir = os.path.join(base_dir, 'matchphotos')
-        match_output_dir = os.path.join(base_dir, 'matchphotos')
-        
-        # Run matching
-        try:
-            # Clear matchphotos directory before starting a new search
-            if os.path.exists(match_output_dir):
-                import shutil
-                for f in os.listdir(match_output_dir):
-                    file_path = os.path.join(match_output_dir, f)
-                    try:
-                        if os.path.isfile(file_path) or os.path.islink(file_path):
-                            os.unlink(file_path)
-                        elif os.path.isdir(file_path):
-                            shutil.rmtree(file_path)
-                    except Exception as e:
-                        app.logger.error(f"Error clearing matchphotos file {f}: {e}")
-            else:
-                os.makedirs(match_output_dir, exist_ok=True)
-
-            result = matcher.find_matches(
-                user_photo_path, 
-                search_dir, 
-                match_output_dir,
-                tolerance=0.60
-            )
-            
-            # Remove temp file
+        # Per-visitor output folder; clear only this visitor's previous results
+        match_output_dir = get_match_dir()
+        cleanup_old_files(MATCH_ROOT, 24 * 3600)
+        import shutil
+        for f in os.listdir(match_output_dir):
+            fp = os.path.join(match_output_dir, f)
             try:
-                os.remove(user_photo_path)
-            except:
-                pass
-                
-            return jsonify({
-                'status': 'success', 
-                'match_count': result.get('matches_found', 0),
-                'matched_files': result.get('matched_files', [])
-            })
-            
-        except Exception as e:
-            app.logger.error(f"Error mapping photos: {e}")
-            return jsonify({'status': 'error', 'message': str(e)}), 500
-            
-    return jsonify({'status': 'error', 'message': 'Invalid file type'}), 400
+                if os.path.isfile(fp) or os.path.islink(fp):
+                    os.unlink(fp)
+                elif os.path.isdir(fp):
+                    shutil.rmtree(fp)
+            except Exception as e:
+                app.logger.error(f"Error clearing match folder file {f}: {e}")
+
+        result = matcher.find_matches(user_photo_path, search_dir, match_output_dir, tolerance=0.60)
+        match_count = result.get('matches_found', 0)
+
+        # ---- Save persistent copy for the event owner's guest-visitor list (private folder) ----
+        if event_id is not None and session.get(f'guest_info_complete_{event_id}'):
+            try:
+                guest_email = session.get(f'guest_email_{event_id}')
+                if guest_email:
+                    persistent_filename = f"guest_{event_id}_{uuid.uuid4().hex}{ext}"
+                    shutil.copy2(user_photo_path, os.path.join(PRIVATE_GUEST_FACES, persistent_filename))
+                    conn = sqlite3.connect('database.db')
+                    conn.execute('''
+                        UPDATE guest_users 
+                        SET photo_path = ?, matches_found = ?
+                        WHERE event_id = ? AND (email = ? OR phone = ?)
+                    ''', (persistent_filename, match_count, event_id, guest_email, guest_email))
+                    conn.commit()
+                    conn.close()
+            except Exception as e:
+                app.logger.error(f"Error saving guest profile face: {e}")
+
+        return jsonify({
+            'status': 'success',
+            'match_count': match_count,
+            'matched_files': result.get('matched_files', [])
+        })
+    except Exception as e:
+        app.logger.exception(f"Error mapping photos: {e}")
+        return jsonify({'status': 'error', 'message': 'Could not process the photo. Please try again.'}), 500
+    finally:
+        try:
+            os.remove(user_photo_path)
+        except OSError:
+            pass
+
 
 @app.route('/api/event/<int:event_id>/download_zip_api', methods=['POST'])
 def download_zip_api(event_id):
-    data = request.get_json()
-    if not data or 'photos' not in data:
+    if not can_access_event(event_id):
+        return jsonify({'status': 'error', 'message': 'Please verify your access to this event first'}), 403
+    if rate_limited(f'zip:{client_ip()}', 20, 600):
+        return jsonify({'status': 'error', 'message': 'Too many downloads. Please wait a few minutes.'}), 429
+
+    data = request.get_json(silent=True) or {}
+    photos = data.get('photos')
+    if not isinstance(photos, list) or not photos:
         return jsonify({'status': 'error', 'message': 'No photos specified'}), 400
-        
-    photos = data.get('photos', [])
-    if not photos:
-        return jsonify({'status': 'error', 'message': 'Photo list is empty'}), 400
+    photos = [p for p in photos[:500] if isinstance(p, str) and p]
 
-    # Ensure downloads directory exists
-    downloads_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'downloads')
-    os.makedirs(downloads_dir, exist_ok=True)
-    
-    # We will search both the event folder and matchphotos folder
-    base_dir = os.path.dirname(os.path.abspath(__file__))
     conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT event_name FROM events WHERE id = ?", (event_id,))
-    event = cursor.fetchone()
+    event = conn.execute("SELECT event_name FROM events WHERE id = ?", (event_id,)).fetchone()
     conn.close()
-    
-    event_name = event[0] if event else f"event_{event_id}"
-    safe_event_name = secure_filename(event_name)
+    if not event:
+        return jsonify({'status': 'error', 'message': 'Event not found'}), 404
+
+    safe_event_name = secure_filename(event[0]) or f"event_{event_id}"
     event_folder = os.path.join(app.config['UPLOAD_FOLDER'], safe_event_name)
-    match_folder = os.path.join(base_dir, 'matchphotos')
+    match_folder = get_match_dir()
 
-    # Generate unique zip file
-    zip_filename = f"{safe_event_name}_photos_{uuid.uuid4().hex[:8]}.zip"
-    zip_path = os.path.join(downloads_dir, zip_filename)
+    cleanup_old_files(PRIVATE_DOWNLOADS, 3600)
+    zip_filename = f"{safe_event_name}_photos_{uuid.uuid4().hex}.zip"
+    zip_path = os.path.join(PRIVATE_DOWNLOADS, zip_filename)
 
+    added = 0
+    used_names = set()
     try:
-        # Create ZIP
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for filename in photos:
-                # Try event folder first (if they are using a public link viewing all photos)
-                file_path = os.path.join(event_folder, filename)
-                if not os.path.exists(file_path):
-                    # Try match folder (if they are viewing from their private selfie link)
-                    file_path = os.path.join(match_folder, filename)
-                
-                # Check directly in upload dir as fallback
-                if not os.path.exists(file_path):
-                     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-
-                if os.path.exists(file_path):
-                    zipf.write(file_path, arcname=filename)
-        
-        # Check if zip actually has files
-        if os.path.getsize(zip_path) < 100: # Basically empty zip
-             os.remove(zip_path)
-             return jsonify({'status': 'error', 'message': 'Could not locate photos on server'}), 500
-
+            for name in photos:
+                candidates = [safe_join(event_folder, name), safe_join(match_folder, name)]
+                prefix = safe_event_name + '/'
+                if name.startswith(prefix):
+                    candidates.append(safe_join(event_folder, name[len(prefix):]))
+                path = next((c for c in candidates if c and os.path.isfile(c) and allowed_file(c)), None)
+                if not path:
+                    continue
+                arcname = os.path.basename(path)
+                if arcname in used_names:
+                    continue
+                used_names.add(arcname)
+                zipf.write(path, arcname=arcname)
+                added += 1
     except Exception as e:
         app.logger.error(f"Error creating zip file: {e}")
         return jsonify({'status': 'error', 'message': 'Error zipping files.'}), 500
 
-    # Construct download URL
+    if added == 0:
+        try:
+            os.remove(zip_path)
+        except OSError:
+            pass
+        return jsonify({'status': 'error', 'message': 'Could not locate photos on server'}), 404
+
     download_url = request.host_url.rstrip('/') + url_for('download_zip', filename=zip_filename)
-        
     return jsonify({'status': 'success', 'download_url': download_url, 'filename': zip_filename})
+
 
 @app.route('/downloads/<filename>')
 def download_zip(filename):
-    downloads_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'downloads')
-    return send_from_directory(downloads_dir, filename, as_attachment=True)
+    # Only zips created by this app (random 128-bit names, kept outside /static, auto-deleted after 1h)
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+_photos_[0-9a-f]{32}\.zip', filename):
+        abort(404)
+    return send_from_directory(PRIVATE_DOWNLOADS, filename, as_attachment=True)
 
 
 # --- API Route for Favoriting Photos ---
 @app.route('/api/toggle_favorite', methods=['POST'])
 def toggle_favorite():
-    data = request.get_json()
-    if not data or 'photo_url' not in data:
-        return jsonify({'status': 'error', 'message': 'Photo URL required'}), 400
-        
-    photo_url = data['photo_url']
-    
-    # Extract filename from URL
-    # URLs might look like /static/uploads/event_name/file.jpg or /matchphotos/file.jpg
     import urllib.parse
-    filename = urllib.parse.unquote(photo_url.split('/')[-1])
-    
-    # Determine source path
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    source_path = ""
-    
-    print(f"DEBUG: toggle_favorite received photo_url: {photo_url}")
-    print(f"DEBUG: toggle_favorite parsed filename: {filename}")
-    
-    if '/static/uploads/' in photo_url:
-        # It's an event photo, we need the event_name/filename part
-        parts = photo_url.split('/static/uploads/')
-        if len(parts) > 1:
-            rel_path = urllib.parse.unquote(parts[1])
-            source_path = os.path.join(app.config['UPLOAD_FOLDER'], rel_path)
-            print(f"DEBUG: toggle_favorite matched /static/uploads/ with rel_path: {rel_path}")
-        else:
-            source_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            print(f"DEBUG: toggle_favorite matched /static/uploads/ but no rel_path, using filename: {filename}")
-    elif '/matchphotos/' in photo_url:
-        source_path = os.path.join(base_dir, 'matchphotos', filename)
-        print(f"DEBUG: toggle_favorite matched /matchphotos/ source_path: {source_path}")
-    else:
-        # Fallback
-        source_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        print(f"DEBUG: toggle_favorite fallback source_path: {source_path}")
-        
-    print(f"DEBUG: toggle_favorite final source_path: {source_path}")
-        
-    if not os.path.exists(source_path):
-        print(f"DEBUG: toggle_favorite source_path does not exist!")
-        return jsonify({'status': 'error', 'message': 'Original photo not found'}), 404
-        
-    # Setup favorites directory
-    # Depending on requirements, this might need to be per-event or per-user
-    # For now, creating a global favorites folder
-    favorites_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'favorites')
-    os.makedirs(favorites_dir, exist_ok=True)
-    
-    dest_path = os.path.join(favorites_dir, filename)
-    
     import shutil
+    data = request.get_json(silent=True) or {}
+    photo_url = data.get('photo_url')
+    if not isinstance(photo_url, str) or not photo_url:
+        return jsonify({'status': 'error', 'message': 'Photo URL required'}), 400
+
+    url_path = urllib.parse.urlparse(photo_url).path
+    source_path = None
+    if url_path.startswith('/static/uploads/'):
+        rel_path = urllib.parse.unquote(url_path[len('/static/uploads/'):])
+        first = rel_path.split('/')[0]
+        if first in accessible_event_folders():
+            source_path = safe_join(app.config['UPLOAD_FOLDER'], rel_path)
+    elif url_path.startswith('/matchphotos/'):
+        rel_path = urllib.parse.unquote(url_path[len('/matchphotos/'):])
+        source_path = safe_join(get_match_dir(), rel_path)
+
+    if not source_path or not os.path.isfile(source_path) or not allowed_file(source_path):
+        return jsonify({'status': 'error', 'message': 'Original photo not found'}), 404
+
+    # Favorites are kept per visitor, outside the public /static folder
+    favorites_dir = os.path.join(PRIVATE_FAVORITES, os.path.basename(get_match_dir()))
+    os.makedirs(favorites_dir, exist_ok=True)
+    dest_path = os.path.join(favorites_dir, os.path.basename(source_path))
+
     try:
-        # If it's already favorited, we might want to "unfavorite" it by removing it?
-        # The prompt says "create one favorite folder in this folder stor only favorite photos"
-        # We will assume toggle behavior: if it's there, remove it; if not, copy it.
-        is_favorited = data.get('is_favorited', True)
-        
-        if is_favorited:
+        if data.get('is_favorited', True):
             if not os.path.exists(dest_path):
                 shutil.copy2(source_path, dest_path)
             return jsonify({'status': 'success', 'message': 'Photo added to favorites', 'action': 'added'})
-        else:
-            if os.path.exists(dest_path):
-                os.remove(dest_path)
-            return jsonify({'status': 'success', 'message': 'Photo removed from favorites', 'action': 'removed'})
-            
+        if os.path.exists(dest_path):
+            os.remove(dest_path)
+        return jsonify({'status': 'success', 'message': 'Photo removed from favorites', 'action': 'removed'})
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        app.logger.error(f"Favorite error: {e}")
+        return jsonify({'status': 'error', 'message': 'Could not update favorites'}), 500
 
-# --- Route to serve matched photos ---
+
+# --- Route to serve matched photos (only the visitor's own results) ---
 @app.route('/matchphotos/<path:filename>')
 def serve_matched_photo(filename):
-    """Serve matched photos from the matchphotos directory"""
-    from flask import send_from_directory
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    matchphotos_dir = os.path.join(base_dir, 'matchphotos')
-    return send_from_directory(matchphotos_dir, filename)
+    return send_from_directory(get_match_dir(), filename)
+
+
+# --- Guest selfies are private: only the event owner may view them ---
+@app.route('/guest_face/<filename>')
+def guest_face(filename):
+    if 'user_id' not in session:
+        abort(404)
+    conn = sqlite3.connect('database.db')
+    row = conn.execute('''
+        SELECT 1 FROM guest_users g JOIN events e ON e.id = g.event_id
+        WHERE g.photo_path = ? AND e.user_id = ?
+    ''', (filename, session['user_id'])).fetchone()
+    conn.close()
+    if not row:
+        abort(404)
+    if os.path.isfile(os.path.join(PRIVATE_GUEST_FACES, os.path.basename(filename))):
+        return send_from_directory(PRIVATE_GUEST_FACES, os.path.basename(filename))
+    # photos saved by older versions of the app
+    return send_from_directory(os.path.join(app.config['UPLOAD_FOLDER'], 'guest_faces'), os.path.basename(filename))
+
 
 @app.route('/source_photos/<filename>')
 def serve_source_photo(filename):
-    """Serve photos directly from Bhuman source directory to speed up display"""
-    from flask import send_from_directory
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    source_dir = os.path.join(base_dir, 'Bhuman')
-    return send_from_directory(source_dir, filename)
+    """Legacy dev folder; now owner-only."""
+    if 'user_id' not in session:
+        abort(404)
+    return send_from_directory(os.path.join(BASE_DIR, 'Bhuman'), filename)
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True, port=int(os.environ.get('PORT', '5000')))
+    app.run(
+        debug=(os.environ.get('FLASK_DEBUG') == '1' and not IS_PRODUCTION),
+        host=os.environ.get('HOST', '127.0.0.1'),
+        port=int(os.environ.get('PORT', '5000')),
+    )

@@ -24,3 +24,7 @@ Bhuman/
 known_faces/
 gaurav/
 static/uploads/
+
+private_data/
+matchphotos/
+.env

@@ -683,6 +683,13 @@
     </script>
 
     <script>
+        // Render server/error text as plain text (never as HTML) to prevent HTML injection.
+        function showUploadError(container, message) {
+            const box = document.createElement('div');
+            box.className = 'status-error';
+            box.textContent = '\u274C ' + message;
+            container.replaceChildren(box);
+        }
             // Function to display matched photos
             function displayMatchedPhotos(matchedFiles, count, timeTaken) {
                 const container = document.getElementById('matchedPhotosContainer');
@@ -826,12 +833,12 @@
                                 }
                             } else {
                                 alert(`❌ ${data.message}`);
-                                if (uploadStatus) uploadStatus.innerHTML = `<div class="status-error">❌ ${data.message}</div>`;
+                                if (uploadStatus) showUploadError(uploadStatus, data.message);
                             }
                         })
                         .catch(error => {
                             alert(`❌ Error: ${error.message}`);
-                            if (uploadStatus) uploadStatus.innerHTML = `<div class="status-error">❌ Error: ${error.message}</div>`;
+                            if (uploadStatus) showUploadError(uploadStatus, `Error: ${error.message}`);
                         })
                         .finally(() => {
                             if (buttonElement && originalHtml) {

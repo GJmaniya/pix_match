@@ -10,6 +10,9 @@
 !*.js
 !*.py
 !.gitignore
+!.env.example
+!requirements*.txt
+!*.md
 
 # Re-ignore things that shouldn't be tracked even if they match above (or are dirs)
 venv/

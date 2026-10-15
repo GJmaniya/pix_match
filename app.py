@@ -140,15 +140,34 @@ DEV_OTP_ECHO = os.environ.get('DEV_OTP_ECHO') == '1' and not IS_PRODUCTION
 EXTRA_ALLOWED_HOSTS = {h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()}
 
 _rate_lock = threading.Lock()
-_rate_hits = defaultdict(deque)
+_rate_hits = defaultdict(deque)          # in-memory fallback only (used if the shared DB is unavailable)
+RATE_DB_PATH = os.path.join(PRIVATE_DIR, 'rate_limits.db')
+
+
+def _init_rate_db():
+    """Shared rate-limit store: every gunicorn worker sees the same counters."""
+    conn = sqlite3.connect(RATE_DB_PATH, timeout=5)
+    try:
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('CREATE TABLE IF NOT EXISTS rate_hits (key TEXT NOT NULL, ts REAL NOT NULL)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_rate_hits_key_ts ON rate_hits (key, ts)')
+        conn.commit()
+    finally:
+        conn.close()
+
+
+try:
+    _init_rate_db()
+except sqlite3.Error:
+    app.logger.exception('Could not initialise the shared rate-limit database; using in-memory limits.')
 
 
 def client_ip():
+    """Client IP as seen through the configured reverse proxy (ProxyFix)."""
     return request.remote_addr or 'unknown'
 
 
-def rate_exceeded(key, limit, window):
-    """True if `key` already has `limit` recorded hits inside the last `window` seconds."""
+def _mem_rate_exceeded(key, limit, window):
     now = time.time()
     with _rate_lock:
         q = _rate_hits[key]
@@ -160,12 +179,43 @@ def rate_exceeded(key, limit, window):
         return len(q) >= limit
 
 
-def rate_record(key):
+def _mem_rate_record(key):
     with _rate_lock:
         _rate_hits[key].append(time.time())
         if len(_rate_hits) > 20000:          # crude memory cap
             for k in list(_rate_hits)[:5000]:
                 _rate_hits.pop(k, None)
+
+
+def rate_exceeded(key, limit, window):
+    """True if `key` already has `limit` recorded hits inside the last `window` seconds."""
+    try:
+        conn = sqlite3.connect(RATE_DB_PATH, timeout=5)
+        try:
+            count = conn.execute(
+                'SELECT COUNT(*) FROM rate_hits WHERE key = ? AND ts > ?',
+                (key, time.time() - window),
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        return count >= limit
+    except sqlite3.Error:
+        return _mem_rate_exceeded(key, limit, window)
+
+
+def rate_record(key):
+    try:
+        conn = sqlite3.connect(RATE_DB_PATH, timeout=5)
+        try:
+            now = time.time()
+            conn.execute('INSERT INTO rate_hits (key, ts) VALUES (?, ?)', (key, now))
+            if secrets.randbelow(50) == 0:   # housekeeping: drop hits older than 1 day
+                conn.execute('DELETE FROM rate_hits WHERE ts < ?', (now - 86400,))
+            conn.commit()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        _mem_rate_record(key)
 
 
 def rate_limited(key, limit, window):
@@ -186,6 +236,101 @@ def safe_join(base, *parts):
     if target == base_real or not target.startswith(base_real + os.sep):
         return None
     return target
+
+
+RESERVED_UPLOAD_DIRS = {'watermarks', 'guest_faces'}
+
+
+def constant_time_equals(a, b):
+    """Timing-safe comparison that accepts any Unicode text.
+
+    secrets.compare_digest() raises TypeError (HTTP 500) when given a non-ASCII str, which
+    anyone could trigger by typing e.g. Gujarati text into a token/PIN field.
+    """
+    return secrets.compare_digest(str(a).encode('utf-8'), str(b).encode('utf-8'))
+
+
+def new_event_folder_name(event_name):
+    """Unique upload folder for a NEW event.
+
+    Two events can share a name (and names like Gujarati/Hindi text sanitise to an empty
+    string), so the folder always gets a random suffix and is never derived from the name alone.
+    """
+    base = (secure_filename(event_name or '') or 'event')[:50]
+    return f"{base}_{uuid.uuid4().hex[:10]}"
+
+
+def get_event_folder(event_id, conn=None):
+    """Upload-folder name stored for an event (falls back to the legacy name-based folder)."""
+    own = conn is None
+    if own:
+        conn = sqlite3.connect(DB_PATH)
+    try:
+        row = conn.execute('SELECT folder_name, event_name FROM events WHERE id = ?', (event_id,)).fetchone()
+    finally:
+        if own:
+            conn.close()
+    if not row:
+        return None
+    return row[0] or secure_filename(row[1] or '') or f'event_{event_id}'
+
+
+def remove_upload_file(relative_path):
+    """Delete one stored upload, refusing any path that escapes the uploads folder."""
+    path = safe_join(app.config['UPLOAD_FOLDER'], relative_path or '')
+    if not path:
+        app.logger.warning('Refused to delete a path outside the uploads folder.')
+        return False
+    try:
+        if os.path.isfile(path):
+            os.remove(path)
+            return True
+    except OSError:
+        app.logger.exception('Could not delete upload %s', path)
+    return False
+
+
+def remove_event_folder_if_unused(folder_name):
+    """After an event is deleted, remove its folder (photos left over + face-embedding cache)."""
+    if not folder_name or folder_name in RESERVED_UPLOAD_DIRS:
+        return
+    path = safe_join(app.config['UPLOAD_FOLDER'], folder_name)
+    if not path:
+        return
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        in_use = conn.execute('SELECT 1 FROM events WHERE folder_name = ?', (folder_name,)).fetchone()
+    finally:
+        conn.close()
+    if not in_use:
+        import shutil
+        shutil.rmtree(path, ignore_errors=True)
+
+
+def save_clean_image(data, dest_path, quality=90):
+    """Validate bytes as a real image and re-encode it (drops EXIF/GPS and any appended payload)."""
+    try:
+        Image.open(io.BytesIO(data)).verify()
+        img = ImageOps.exif_transpose(Image.open(io.BytesIO(data)))
+        if os.path.splitext(dest_path)[1].lower() in ('.jpg', '.jpeg') and img.mode not in ('RGB', 'L'):
+            img = img.convert('RGB')
+        img.save(dest_path, quality=quality)
+        return True
+    except Exception:
+        app.logger.exception('Rejected an invalid image upload')
+        return False
+
+
+def is_cross_site_navigation():
+    """True when a GET request was triggered from another website (e.g. <img src=".../logout">)."""
+    site = request.headers.get('Sec-Fetch-Site')
+    if site:
+        return site not in ('same-origin', 'none')
+    referer = request.headers.get('Referer')
+    if referer:
+        host = urlparse(referer).netloc
+        return host != request.host and host not in EXTRA_ALLOWED_HOSTS
+    return False
 
 
 def cleanup_old_files(directory, max_age_seconds):
@@ -249,12 +394,13 @@ def accessible_event_folders():
         folders = set()
         uid = session.get('user_id')
         if uid:
-            for (name,) in conn.execute('SELECT event_name FROM events WHERE user_id = ?', (uid,)):
-                folders.add(secure_filename(name or ''))
+            for folder, name in conn.execute('SELECT folder_name, event_name FROM events WHERE user_id = ?', (uid,)):
+                folders.add(folder or secure_filename(name or ''))
         if ids:
             marks = ','.join('?' * len(ids))
-            for (name,) in conn.execute(f'SELECT event_name FROM events WHERE id IN ({marks})', tuple(ids)):
-                folders.add(secure_filename(name or ''))
+            for folder, name in conn.execute(f'SELECT folder_name, event_name FROM events WHERE id IN ({marks})', tuple(ids)):
+                folders.add(folder or secure_filename(name or ''))
+        folders.discard('')
         return folders
     finally:
         conn.close()
@@ -268,6 +414,12 @@ def block_cross_site_posts():
         if origin:
             host = urlparse(origin).netloc
             if host != request.host and host not in EXTRA_ALLOWED_HOSTS:
+                abort(403)
+        else:
+            # Browsers always send Origin on POST. No Origin/Referer: trust only an explicit
+            # same-origin Fetch-Metadata header (set ALLOW_MISSING_ORIGIN=1 for curl/tests).
+            site = request.headers.get('Sec-Fetch-Site')
+            if site not in ('same-origin', 'none') and os.environ.get('ALLOW_MISSING_ORIGIN') != '1':
                 abort(403)
 
 
@@ -306,6 +458,11 @@ def add_security_headers(resp):
     resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
     resp.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
     resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    # Directives that harden the site without breaking the existing inline scripts/styles.
+    resp.headers.setdefault(
+        'Content-Security-Policy',
+        "base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'",
+    )
     if IS_PRODUCTION:
         resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
     return resp
@@ -346,6 +503,7 @@ def init_db():
                 privacy TEXT,
                 cover_photo TEXT,
                 pin_code TEXT,
+                folder_name TEXT,
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
@@ -407,6 +565,7 @@ def init_db():
         migrations_list = list(migrations.items()) + [
             ('guest_users', ('photo_path', 'TEXT')),
             ('guest_users', ('matches_found', 'INTEGER')),
+            ('events', ('folder_name', 'TEXT')),
         ]
         for table, (column, definition) in migrations_list:
             columns = {row[1] for row in cur.execute(f'PRAGMA table_info({table})')}
@@ -426,6 +585,19 @@ def init_db():
         for column, definition in user_migrations.items():
             if column not in user_columns:
                 cur.execute(f'ALTER TABLE users ADD COLUMN {column} {definition}')
+        # Older events keep their existing (name-based) folder so their photos stay reachable.
+        for event_id, event_name in cur.execute(
+            "SELECT id, event_name FROM events WHERE folder_name IS NULL OR folder_name = ''"
+        ).fetchall():
+            legacy = secure_filename(event_name or '') or f'event_{event_id}'
+            cur.execute('UPDATE events SET folder_name = ? WHERE id = ?', (legacy, event_id))
+        for folder, total in cur.execute(
+            'SELECT folder_name, COUNT(*) FROM events GROUP BY folder_name HAVING COUNT(*) > 1'
+        ).fetchall():
+            app.logger.warning(
+                'Folder %r is shared by %s events (created before the unique-folder fix). '
+                'Their photos are mixed together; move them manually.', folder, total,
+            )
     conn.close()
 
 # ensure DB exists
@@ -525,7 +697,8 @@ def oauth2callback():
             if not access_token:
                 return "No id_token or access token returned by Google.", 500
             r = requests.get('https://openidconnect.googleapis.com/v1/userinfo',
-                             headers={'Authorization': f'Bearer {access_token}'})
+                             headers={'Authorization': f'Bearer {access_token}'},
+                             timeout=10)
             if r.status_code != 200:
                 return f"Failed to fetch user info: {r.status_code}", 500
             userinfo = r.json()
@@ -622,7 +795,7 @@ def watermark_settings():
     new_logo_path = None
 
     if request.method == 'POST':
-        if not secrets.compare_digest(
+        if not constant_time_equals(
             csrf_token,
             request.form.get('csrf_token', ''),
         ):
@@ -825,7 +998,7 @@ def _render_admin_accounts(unlock_code=None, error=None, notice=None):
 def _admin_csrf_valid():
     expected = session.get('admin_csrf_token', '')
     provided = request.form.get('csrf_token', '')
-    return bool(expected and secrets.compare_digest(expected, provided))
+    return bool(expected and constant_time_equals(expected, provided))
 
 def _generate_unique_unlock_code(conn):
     while True:
@@ -863,13 +1036,23 @@ def admin_panel():
                 ), 400
             username = request.form.get('username', '')
             password = request.form.get('password', '')
-            username_valid = secrets.compare_digest(username, ADMIN_USERNAME)
+            admin_ip_key = f'admin_login:{client_ip()}'
+            if rate_exceeded(admin_ip_key, 5, 900) or rate_exceeded('admin_login:all', 30, 900):
+                return render_template(
+                    'admin_login.html',
+                    error='Too many sign-in attempts. Please wait 15 minutes and try again.',
+                    csrf_token=csrf_token,
+                ), 429
+            # bytes, so non-ASCII input cannot raise TypeError
+            username_valid = secrets.compare_digest(username.encode('utf-8'), ADMIN_USERNAME.encode('utf-8'))
             password_valid = check_password_hash(ADMIN_PASSWORD_HASH, password)
             if username_valid and password_valid:
                 session.clear()
                 session['admin_authenticated'] = True
                 session['admin_csrf_token'] = secrets.token_urlsafe(32)
                 return redirect(url_for('admin_panel'))
+            rate_record(admin_ip_key)
+            rate_record('admin_login:all')
             error = 'Invalid username or password.'
         return render_template('admin_login.html', error=error, csrf_token=csrf_token)
 
@@ -1015,7 +1198,7 @@ def account_unlock():
 
     expected = session.get('account_unlock_csrf_token', '')
     provided = request.form.get('csrf_token', '')
-    if not expected or not secrets.compare_digest(expected, provided):
+    if not expected or not constant_time_equals(expected, provided):
         return 'Invalid or expired request token. Refresh the page and try again.', 400
 
     unlock_code = request.form.get('unlock_code', '').strip().upper()
@@ -1054,11 +1237,15 @@ def account_unlock():
 
 @app.route('/admin/logout')
 def admin_logout():
+    if is_cross_site_navigation():
+        return redirect(url_for('admin_panel'))
     session.pop('admin_authenticated', None)
     return redirect(url_for('admin_panel'))
 
 @app.route('/logout')
 def logout():
+    if is_cross_site_navigation():
+        return redirect(url_for('home'))
     session.clear()
     return redirect(url_for('home'))
 
@@ -1182,43 +1369,46 @@ def create_event():
         return redirect(url_for('login'))
         
     if request.method == 'POST':
-        event_name = request.form['event_name']
-        
-        # Handle cover photo upload
+        event_name = (request.form.get('event_name') or '').strip()
+        if not event_name or len(event_name) > 120:
+            flash('Event name is required (maximum 120 characters).', 'error')
+            return render_template('create_event.html'), 400
+        folder_name = new_event_folder_name(event_name)
+        event_date = (request.form.get('event_date') or '').strip()[:40]
+        event_venue = (request.form.get('event_venue') or '').strip()[:200]
+        event_category = (request.form.get('event_category') or '').strip()[:60]
+
+        # Handle cover photo upload (validated and re-encoded, never stored as raw bytes)
         cover_photo_filename = None
         if 'cover_photo' in request.files:
             file = request.files['cover_photo']
             if file and file.filename != '' and allowed_file(file.filename):
-                # Create event-specific folder
-                event_folder = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(event_name))
+                event_folder = os.path.join(app.config['UPLOAD_FOLDER'], folder_name)
                 os.makedirs(event_folder, exist_ok=True)
-                
-                filename = secure_filename(file.filename)
-                # Add timestamp to make filename unique
-                import uuid
-                unique_filename = f"{uuid.uuid4().hex}_{filename}"
-                file.save(os.path.join(event_folder, unique_filename))
-                
-                # Store relative path: event_name/filename
-                cover_photo_filename = f"{secure_filename(event_name)}/{unique_filename}"
-        
+                ext = os.path.splitext(file.filename)[1].lower()
+                unique_filename = f"cover_{uuid.uuid4().hex}{ext}"
+                if save_clean_image(file.read(), os.path.join(event_folder, unique_filename)):
+                    cover_photo_filename = f"{folder_name}/{unique_filename}"
+                else:
+                    flash('The cover photo was not a valid image and was skipped.', 'error')
+
         # Generate a random 6-character PIN code for the event
         import string
         new_pin = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
 
         # Save event directly to DB, skipping privacy step
-        conn = sqlite3.connect('database.db')
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO events (user_id, event_name, event_date, venue, category, privacy, cover_photo, pin_code)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (session['user_id'], event_name, request.form['event_date'],
-              request.form['event_venue'], request.form['event_category'], 'Full access', cover_photo_filename, new_pin))
-        
+            INSERT INTO events (user_id, event_name, event_date, venue, category, privacy, cover_photo, pin_code, folder_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (session['user_id'], event_name, event_date, event_venue, event_category,
+              'Full access', cover_photo_filename, new_pin, folder_name))
+
         new_event_id = cursor.lastrowid
         conn.commit()
         conn.close()
-        
+
         return redirect(url_for('add_album', event_id=new_event_id))
         
     return render_template('create_event.html')
@@ -1228,7 +1418,7 @@ def create_event():
 def add_album(event_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT event_name, cover_photo FROM events WHERE id = ? AND user_id = ?", (event_id, session['user_id']))
     event = cursor.fetchone()
@@ -1242,7 +1432,7 @@ def view_album(event_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT event_name FROM events WHERE id = ? AND user_id = ?", (event_id, session['user_id']))
     event = cursor.fetchone()
@@ -1281,7 +1471,7 @@ def view_sub_album(event_id, sub_event_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     # Verify event ownership
@@ -1320,11 +1510,11 @@ def create_sub_event(event_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
         
-    folder_name = request.form.get('folder_name', '').strip()
+    folder_name = request.form.get('folder_name', '').strip()[:80]
     if not folder_name:
         return redirect(url_for('view_album', event_id=event_id))
         
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     # Verify event ownership
@@ -1344,7 +1534,7 @@ def delete_folder(event_id, sub_event_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
         
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     # Verify event ownership
@@ -1353,21 +1543,22 @@ def delete_folder(event_id, sub_event_id):
         conn.close()
         return redirect(url_for('dashboard'))
         
+    # The folder must belong to THIS event (otherwise one user could wipe another user's folder)
+    cursor.execute("SELECT id FROM sub_events WHERE id = ? AND event_id = ?", (sub_event_id, event_id))
+    if not cursor.fetchone():
+        conn.close()
+        return redirect(url_for('view_album', event_id=event_id))
+
     # Get all photos in this folder
-    cursor.execute("SELECT filename FROM photos WHERE sub_event_id = ?", (sub_event_id,))
+    cursor.execute("SELECT filename FROM photos WHERE sub_event_id = ? AND event_id = ?", (sub_event_id, event_id))
     photos_to_delete = cursor.fetchall()
-    
+
     # Delete physical files
     for photo in photos_to_delete:
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo[0])
-        try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        except Exception as e:
-            app.logger.error(f"Error removing file {file_path}: {e}")
-            
+        remove_upload_file(photo[0])
+
     # Delete records from DB
-    cursor.execute("DELETE FROM photos WHERE sub_event_id = ?", (sub_event_id,))
+    cursor.execute("DELETE FROM photos WHERE sub_event_id = ? AND event_id = ?", (sub_event_id, event_id))
     cursor.execute("DELETE FROM sub_events WHERE id = ? AND event_id = ?", (sub_event_id, event_id))
     
     conn.commit()
@@ -1382,7 +1573,7 @@ def upload_photos(event_id):
     if 'photos' not in request.files:
         return redirect(url_for('view_album', event_id=event_id))
     
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     # Check event ownership and load the account's watermark settings.
@@ -1410,13 +1601,24 @@ def upload_photos(event_id):
             event[1],
         )
         return "Configured watermark logo is missing. Update it in Watermark settings.", 500
-    sub_event_id = request.form.get('sub_event_id')
-    compress_quality = request.form.get('compress', '85')
+    sub_event_id = request.form.get('sub_event_id') or None
+    if sub_event_id is not None:
+        # The target folder must belong to THIS event
+        if not str(sub_event_id).isdigit() or not cursor.execute(
+            'SELECT 1 FROM sub_events WHERE id = ? AND event_id = ?', (int(sub_event_id), event_id)
+        ).fetchone():
+            conn.close()
+            return "Folder not found", 404
+        sub_event_id = int(sub_event_id)
+    try:
+        compress_quality = str(max(1, min(100, int(request.form.get('compress', '85')))))
+    except (TypeError, ValueError):
+        compress_quality = '85'
     
     app.logger.debug(f"Uploading photos for event '{event_name}' (ID: {event_id}), Folder ID: {sub_event_id}, Compress Quality: {compress_quality}")
     
     # Create event-specific folder
-    folder_name = secure_filename(event_name)
+    folder_name = get_event_folder(event_id, conn)
     event_folder = os.path.join(app.config['UPLOAD_FOLDER'], folder_name)
     os.makedirs(event_folder, exist_ok=True)
     
@@ -1448,7 +1650,10 @@ def upload_photos(event_id):
     tasks = []
     for file in files:
         if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
+            original_stem, original_ext = os.path.splitext(file.filename)
+            stem = secure_filename(original_stem)[:40] or 'photo'
+            # Unique name: stops overwriting, and keeps the extension for non-ASCII file names
+            filename = f"{stem}_{uuid.uuid4().hex[:8]}{original_ext.lower()}"
             save_path = os.path.join(event_folder, filename)
             file_data = file.read()
             tasks.append((file_data, filename, save_path, compress_quality))
@@ -1475,7 +1680,7 @@ def upload_photos(event_id):
 
     # Batch insert into database
     for filename in processed_filenames:
-        relative_path = f"{secure_filename(event_name)}/{filename}"
+        relative_path = f"{folder_name}/{filename}"
         if sub_event_id:
             cursor.execute("INSERT INTO photos (event_id, sub_event_id, filename) VALUES (?, ?, ?)", (event_id, sub_event_id, relative_path))
         else:
@@ -1488,7 +1693,7 @@ def upload_photos(event_id):
     try:
         import threading
         # Ensure matcher processes the new embedding without blocking the user upload request
-        cache_path = os.path.join(event_folder, "embeddings_cache.pt")
+        cache_path = os.path.join(event_folder, "embeddings_cache.npz")
         def train_model():
             try:
                 app.logger.debug(f"Starting background auto-training for event {event_name}...")
@@ -1513,7 +1718,7 @@ def delete_event(event_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     cursor.execute("SELECT user_id FROM events WHERE id = ?", (event_id,))
@@ -1522,16 +1727,11 @@ def delete_event(event_id):
         conn.close()
         return redirect(url_for('dashboard'))
 
+    event_folder_name = get_event_folder(event_id, conn)
     cursor.execute("SELECT filename FROM photos WHERE event_id = ?", (event_id,))
     photos_to_delete = cursor.fetchall()
     for photo in photos_to_delete:
-        filename = photo[0]
-        try:
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        except Exception as e:
-            app.logger.error(f"Error deleting file {filename}: {e}")
+        remove_upload_file(photo[0])
 
     cursor.execute("DELETE FROM photos WHERE event_id = ?", (event_id,))
     cursor.execute("DELETE FROM sub_events WHERE event_id = ?", (event_id,))
@@ -1539,6 +1739,7 @@ def delete_event(event_id):
 
     conn.commit()
     conn.close()
+    remove_event_folder_if_unused(event_folder_name)
     return redirect(url_for('dashboard'))
 
 @app.route('/delete_photo/<int:photo_id>', methods=['POST'])
@@ -1546,7 +1747,7 @@ def delete_photo(photo_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     cursor.execute("SELECT event_id, filename FROM photos WHERE id = ?", (photo_id,))
@@ -1564,12 +1765,7 @@ def delete_photo(photo_id):
         conn.close()
         return redirect(url_for('dashboard'))
 
-    try:
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)
-    except Exception as e:
-        app.logger.error(f"Error deleting file {filename}: {e}")
+    remove_upload_file(filename)
 
     cursor.execute("DELETE FROM photos WHERE id = ?", (photo_id,))
     conn.commit()
@@ -1587,7 +1783,7 @@ def delete_all_photos(event_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     # Security check: ensure the event belongs to the current user
@@ -1601,13 +1797,7 @@ def delete_all_photos(event_id):
     cursor.execute("SELECT filename FROM photos WHERE event_id = ?", (event_id,))
     photos_to_delete = cursor.fetchall()
     for photo in photos_to_delete:
-        filename = photo[0]
-        try:
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        except Exception as e:
-            app.logger.error(f"Error deleting file {filename}: {e}") # Log the error
+        remove_upload_file(photo[0])
 
     # Step 2: Delete all photo records for this event from the 'photos' table
     cursor.execute("DELETE FROM photos WHERE event_id = ?", (event_id,))
@@ -1626,7 +1816,7 @@ def guest_visitors(event_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
@@ -1663,7 +1853,7 @@ def guest_visitors(event_id):
 
 @app.route('/event/<int:event_id>/find')
 def find_photos(event_id):
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row # Allows accessing columns by name
     cursor = conn.cursor()
 
@@ -1693,7 +1883,7 @@ def guest_signup(event_id):
         return jsonify({'error': 'Too many requests'}), 429
     
     # Store in database
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO guest_users (event_id, email, phone, created_at)
@@ -1719,7 +1909,7 @@ def generate_otp():
 
 
 def _event_exists(event_id):
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     try:
         return conn.execute('SELECT 1 FROM events WHERE id = ?', (event_id,)).fetchone() is not None
     finally:
@@ -1743,7 +1933,7 @@ def request_otp(event_id):
     otp_code = generate_otp()
     expires_at = datetime.now() + timedelta(minutes=10)
 
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
         DELETE FROM otp_codes 
@@ -1789,13 +1979,13 @@ def verify_otp(event_id):
     fail_key = f'otp-fail:{event_id}:{contact.lower()}'
     ip_key = f'otp-fail-ip:{client_ip()}'
     if rate_exceeded(fail_key, 5, 600) or rate_exceeded(ip_key, 30, 600):
-        conn = sqlite3.connect('database.db')
+        conn = sqlite3.connect(DB_PATH)
         conn.execute('DELETE FROM otp_codes WHERE event_id = ? AND contact = ? AND verified = 0', (event_id, contact))
         conn.commit()
         conn.close()
         return jsonify({'error': 'Too many wrong attempts. Please request a new OTP later.'}), 429
 
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
         SELECT id, otp_code, expires_at FROM otp_codes
@@ -1878,7 +2068,7 @@ def save_guest_info(event_id):
     if not email and not phone:
         return jsonify({'error': 'Either email or phone is required'}), 400
     
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     # Determine final email and phone
@@ -1956,7 +2146,7 @@ def auth_event(event_id):
     # Check if already authenticated in current session
     if session.get(f'otp_verified_{event_id}') and session.get(f'guest_info_complete_{event_id}'):
                                 # Already authenticated - fetch event and photos, then show share page
-        conn = sqlite3.connect('database.db')
+        conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
@@ -1977,7 +2167,7 @@ def auth_event(event_id):
         return render_template('share_page.html', event=event, photos=photos, event_id=event_id, otp_verified=True, mode=mode)
     
     # Show authentication page
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -1999,13 +2189,13 @@ def verify_pin(event_id):
     if rate_exceeded(pin_key, 5, 600):
         return redirect(url_for('auth_event', event_id=event_id, mode='private', error='Too many attempts. Try again in a few minutes.'))
     
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT pin_code FROM events WHERE id = ?", (event_id,))
     event = cursor.fetchone()
     conn.close()
     
-    if event and event[0] and secrets.compare_digest(str(event[0]), entered_pin):
+    if event and event[0] and constant_time_equals(str(event[0]), entered_pin):
         session[f'pin_verified_{event_id}'] = True
         return redirect(url_for('auth_event', event_id=event_id, mode='private'))
     rate_record(pin_key)
@@ -2020,7 +2210,7 @@ def share_event(event_id):
     # Make the guest's session persistent so they don't have to re-enter details
     session.permanent = True
     
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     # Use row_factory to get results as dictionaries for easy access in the template
     conn.row_factory = sqlite3.Row 
     cursor = conn.cursor()
@@ -2088,12 +2278,12 @@ def match_photos_api():
     try:
         search_dir = os.path.join(BASE_DIR, 'Bhuman')   # legacy default
         if event_id is not None:
-            conn = sqlite3.connect('database.db')
-            event = conn.execute("SELECT event_name FROM events WHERE id = ?", (event_id,)).fetchone()
-            conn.close()
-            if not event:
+            event_folder_name = get_event_folder(event_id)
+            if not event_folder_name:
                 return jsonify({'status': 'error', 'message': 'Event not found'}), 404
-            search_dir = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(event[0]))
+            search_dir = safe_join(app.config['UPLOAD_FOLDER'], event_folder_name)
+            if not search_dir:
+                return jsonify({'status': 'error', 'message': 'Event not found'}), 404
 
         # Per-visitor output folder; clear only this visitor's previous results
         match_output_dir = get_match_dir()
@@ -2119,7 +2309,7 @@ def match_photos_api():
                 if guest_email:
                     persistent_filename = f"guest_{event_id}_{uuid.uuid4().hex}{ext}"
                     shutil.copy2(user_photo_path, os.path.join(PRIVATE_GUEST_FACES, persistent_filename))
-                    conn = sqlite3.connect('database.db')
+                    conn = sqlite3.connect(DB_PATH)
                     conn.execute('''
                         UPDATE guest_users 
                         SET photo_path = ?, matches_found = ?
@@ -2158,13 +2348,13 @@ def download_zip_api(event_id):
         return jsonify({'status': 'error', 'message': 'No photos specified'}), 400
     photos = [p for p in photos[:500] if isinstance(p, str) and p]
 
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     event = conn.execute("SELECT event_name FROM events WHERE id = ?", (event_id,)).fetchone()
     conn.close()
     if not event:
         return jsonify({'status': 'error', 'message': 'Event not found'}), 404
 
-    safe_event_name = secure_filename(event[0]) or f"event_{event_id}"
+    safe_event_name = get_event_folder(event_id) or f"event_{event_id}"
     event_folder = os.path.join(app.config['UPLOAD_FOLDER'], safe_event_name)
     match_folder = get_match_dir()
 
@@ -2266,7 +2456,7 @@ def serve_matched_photo(filename):
 def guest_face(filename):
     if 'user_id' not in session:
         abort(404)
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     row = conn.execute('''
         SELECT 1 FROM guest_users g JOIN events e ON e.id = g.event_id
         WHERE g.photo_path = ? AND e.user_id = ?

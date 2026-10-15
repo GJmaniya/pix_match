@@ -1,0 +1,36 @@
+# ---------------------------------------------------------------------------
+# HARDENED dependency set (recommended for production).
+#
+# Why: facenet-pytorch 2.6.0 pins old libraries (Pillow < 10.3, torch < 2.3, numpy < 2).
+# pip-audit reports ~29 known vulnerabilities in Pillow 10.2.0 (this app parses
+# untrusted uploaded images!) and ~23 in torch 2.2.2. Installing facenet-pytorch with
+# --no-deps lets the rest of the stack stay on patched versions.
+#
+# Install (in this order, inside your virtualenv):
+#     pip install -r requirements-hardened.txt
+#     pip install --no-deps facenet-pytorch==2.6.0
+#     python smoke_test_models.py        # must print "MODEL SMOKE TEST OK"
+#
+# If the smoke test fails on your machine, fall back to requirements.txt.
+# ---------------------------------------------------------------------------
+torch>=2.14.1,<3            # pip-audit: no known vulnerabilities (needs Python >= 3.10)
+torchvision>=0.29.1,<1
+numpy>=1.26.4,<3
+Pillow>=12.3.0,<13
+opencv-python>=4.11,<5
+faiss-cpu>=1.11,<2
+tqdm>=4.66,<5
+requests>=2.32.4,<3
+
+Flask>=3.1.3,<4
+Werkzeug>=3.1.9,<4
+Flask-Mail>=0.10.0,<1
+python-dotenv>=1.0,<2
+google-auth>=2.40,<3
+google-auth-oauthlib>=1.2,<2
+google-auth-httplib2>=0.2,<1
+phonenumbers>=9,<10
+geopy>=2.4,<3
+folium>=0.20,<1
+gunicorn>=23,<27
+watchdog>=6,<7

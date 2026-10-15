@@ -1,18 +1,29 @@
-facenet-pytorch
-torch
-opencv-python
-numpy
-faiss-cpu
-Flask
-Werkzeug
-Flask-Mail
-python-dotenv
-Pillow
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
-requests
-phonenumbers
-geopy
-folium
-gunicorn
+# Bounded version ranges (no more "anything goes" unpinned installs).
+#
+# NOTE: facenet-pytorch 2.6.0 forces Pillow<10.3 and torch<2.3, which have known
+# security vulnerabilities. Prefer requirements-hardened.txt for production
+# (see the instructions at the top of that file).
+#
+# After you confirm everything works, freeze the exact versions for reproducible deploys:
+#     pip freeze > requirements.lock
+facenet-pytorch>=2.6.0,<3
+torch>=2.2.2,<2.3
+torchvision>=0.17.2,<0.18
+numpy>=1.26.4,<2
+Pillow>=10.2.0,<10.3
+opencv-python>=4.8,<5
+faiss-cpu>=1.7,<2
+requests>=2.32.4,<3
+
+Flask>=3.1.3,<4
+Werkzeug>=3.1.9,<4
+Flask-Mail>=0.10.0,<1
+python-dotenv>=1.0,<2
+google-auth>=2.40,<3
+google-auth-oauthlib>=1.2,<2
+google-auth-httplib2>=0.2,<1
+phonenumbers>=9,<10
+geopy>=2.4,<3
+folium>=0.20,<1
+gunicorn>=23,<27
+watchdog>=6,<7

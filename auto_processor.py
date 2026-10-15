@@ -52,8 +52,8 @@ class PhotoUploadHandler(FileSystemEventHandler):
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, user_id FROM events WHERE event_name = ?",
-                (event_name,),
+                "SELECT id, user_id FROM events WHERE folder_name = ? OR (folder_name IS NULL AND event_name = ?)",
+                (event_name, event_name),
             )
             event_row = cursor.fetchone()
             
@@ -126,7 +126,7 @@ class PhotoUploadHandler(FileSystemEventHandler):
 
             # 5. Background ML Training
             event_folder = os.path.dirname(filepath)
-            cache_path = os.path.join(event_folder, "embeddings_cache.pt")
+            cache_path = os.path.join(event_folder, "embeddings_cache.npz")
             
             def train_model():
                 try:

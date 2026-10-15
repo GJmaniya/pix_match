@@ -62,7 +62,8 @@ class FaceMatcher:
         """
         # Get all image files recursively, but ONLY those present in the database
         import sqlite3
-        conn = sqlite3.connect('database.db')
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database.db')
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
         # We need to extract just the filenames from the database relative paths 
@@ -96,7 +97,10 @@ class FaceMatcher:
         if os.path.exists(cache_path):
             logging.info(f"Loading embeddings from cache: {cache_path}")
             try:
-                file_embeddings = torch.load(cache_path, weights_only=False)
+                # .npz with allow_pickle=False can only contain plain numeric arrays, so a
+                # tampered cache file can never execute code (the old torch.load pickle could).
+                with np.load(cache_path, allow_pickle=False) as data:
+                    file_embeddings = {name: data[name] for name in data.files}
             except Exception as e:
                 logging.error(f"Error loading cache: {e}. Starting fresh...")
                 file_embeddings = {}
@@ -135,7 +139,15 @@ class FaceMatcher:
         # Save cache if updated
         if cache_needs_update:
             logging.info(f"Updating cache with {len(file_embeddings)} total entries: {cache_path}")
-            torch.save(file_embeddings, cache_path)
+            tmp_path = cache_path + '.tmp.npz'
+            np.savez_compressed(tmp_path, **file_embeddings)
+            os.replace(tmp_path, cache_path)   # atomic: never leaves a half-written cache
+            legacy_cache = os.path.join(os.path.dirname(cache_path), 'embeddings_cache.pt')
+            if os.path.exists(legacy_cache):    # old pickle-based cache is no longer trusted/used
+                try:
+                    os.remove(legacy_cache)
+                except OSError:
+                    pass
             
         return file_embeddings
 
@@ -154,7 +166,7 @@ class FaceMatcher:
             return {"status": "error", "message": "No face detected in uploaded photo."}
             
         # 2. Load or Compute Search Embeddings
-        cache_path = os.path.join(search_dir, "embeddings_cache.pt")
+        cache_path = os.path.join(search_dir, "embeddings_cache.npz")
         search_embeddings_map = self.load_or_compute_directory_embeddings(search_dir, cache_path)
         
         if not search_embeddings_map:
